@@ -33,14 +33,13 @@ public class CategoriseIncident
 public static class CategoriseIncidentEndpoint
 {
     [WolverinePost("/api/incidents/categorise"), AggregateHandler]
-    public static (Events, OutgoingMessages) Post(
-        CategoriseIncident command, 
-        IncidentDetails existing, 
+    public static Events Post(
+        CategoriseIncident command,
+        IncidentDetails existing,
         User user)
     {
         var events = new Events();
-        var messages = new OutgoingMessages();
-        
+
         if (existing.Category != command.Category)
         {
             events += new IncidentCategorised
@@ -49,15 +48,11 @@ public static class CategoriseIncidentEndpoint
                 UserId = user.Id
             };
 
-            // Send a command message to try to assign the priority
-            messages.Add(new TryAssignPriority
-            {
-                IncidentId = existing.Id,
-                UserId = user.Id
-            });
+            // Note: TryAssignPriority command is sent automatically via event forwarding
+            // configured in Program.cs, so we don't need to send it manually here
         }
 
-        return (events, messages);
+        return events;
     }
 }
 

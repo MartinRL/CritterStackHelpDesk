@@ -22,23 +22,19 @@ public class CategoriseIncidentTests
             IncidentCategory.Hardware);
 
         var user = new User(Guid.NewGuid());
-        var (events, messages) = CategoriseIncidentEndpoint.Post(command, details, user);
+        var events = CategoriseIncidentEndpoint.Post(command, details, user);
 
         // There should be one appended event
         var categorised = events.Single()
             .ShouldBeOfType<IncidentCategorised>();
-        
+
         categorised
             .Category.ShouldBe(IncidentCategory.Database);
-        
+
         categorised.UserId.ShouldBe(user.Id);
 
-        // And there should be a single outgoing message
-        var message = messages.Single()
-            .ShouldBeOfType<TryAssignPriority>();
-        
-        message.IncidentId.ShouldBe(details.Id);
-        message.UserId.ShouldBe(user.Id);
+        // Note: TryAssignPriority command is sent via event forwarding,
+        // not directly from this endpoint, so we don't test for it here
 
     }
 }
