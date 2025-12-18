@@ -52,7 +52,8 @@ public static class CategoriseIncidentEndpoint
             // Send a command message to try to assign the priority
             messages.Add(new TryAssignPriority
             {
-                IncidentId = existing.Id
+                IncidentId = existing.Id,
+                UserId = user.Id
             });
         }
 
