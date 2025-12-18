@@ -29,17 +29,24 @@ public class AppFixture : IAsyncLifetime
         // This is bootstrapping the actual application using
         // its implied Program.Main() set up
         // This is using a library named "Alba". See https://jasperfx.github.io/alba for more information
+
+        // Configure AuthenticationStub with a default authenticated identity
+        // The "Test" scheme is used for test authentication
+        // Individual tests will add the user-id claim via WithClaim()
+        var authStub = new AuthenticationStub("Test")
+            .WithName("test-user");
+
         Host = await AlbaHost.For<Program>(x =>
         {
             x.ConfigureServices(services =>
             {
                 services.DisableAllExternalWolverineTransports();
-                
+
                 // We're going to establish some baseline data
                 // for testing
                 services.InitializeMartenWith<BaselineData>();
             });
-        }, new AuthenticationStub());
+        }, authStub);
     }
 
     public Task DisposeAsync()

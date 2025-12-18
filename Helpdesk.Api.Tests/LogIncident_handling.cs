@@ -48,11 +48,11 @@ public class log_incident : IntegrationContext
         // Log a new incident first
         var initial = await Scenario(x =>
         {
+            x.WithClaim(new Claim("user-id", user.Id.ToString()));
+
             var contact = new Contact(ContactChannel.Email);
             x.Post.Json(new LogIncident(BaselineData.Customer1Id, contact, "It's broken")).ToUrl("/api/incidents");
             x.StatusCodeShouldBe(201);
-            
-            x.WithClaim(new Claim("user-id", user.Id.ToString()));
         });
 
         var incidentId = initial.ReadAsJson<NewIncidentResponse>().IncidentId;

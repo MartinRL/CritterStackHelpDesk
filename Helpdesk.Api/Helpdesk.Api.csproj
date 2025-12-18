@@ -9,7 +9,6 @@
 
   <ItemGroup>
     <PackageReference Include="Marten.AspNetCore" Version="8.16.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
     <PackageReference Include="WolverineFx.Marten" Version="5.6.0" />
