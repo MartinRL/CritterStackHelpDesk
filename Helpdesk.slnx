@@ -4,6 +4,7 @@
   </Folder>
   <Folder Name="/docs/">
     <File Path="README.md" />
+    <File Path="CLAUDE.md" />
   </Folder>
   <Project Path="EventSourcingDemo/EventSourcingDemo.csproj" />
   <Project Path="Helpdesk.Api.Tests/Helpdesk.Api.Tests.csproj" />
