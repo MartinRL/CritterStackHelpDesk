@@ -1,4 +1,4 @@
-using Marten.Events;
+using JasperFx.Events;
 using Marten.Schema;
 
 namespace Helpdesk.Api;

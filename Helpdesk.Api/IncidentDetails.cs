@@ -1,4 +1,4 @@
-using Marten.Events;
+using JasperFx.Events;
 using Marten.Events.Aggregation;
 
 namespace Helpdesk.Api;
@@ -27,7 +27,7 @@ public enum IncidentNoteType
     FromCustomer
 }
 
-public class IncidentDetailsProjection: SingleStreamProjection<IncidentDetails>
+public class IncidentDetailsProjection: SingleStreamProjection<IncidentDetails, Guid>
 {
     public static IncidentDetails Create(IEvent<IncidentLogged> logged) =>
         new(logged.StreamId, logged.Data.CustomerId, IncidentStatus.Pending, Array.Empty<IncidentNote>());

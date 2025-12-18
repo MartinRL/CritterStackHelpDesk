@@ -1,8 +1,8 @@
 using Helpdesk.Api;
 using JasperFx.CodeGeneration;
 using JasperFx.Core;
+using JasperFx.Events.Projections;
 using Marten;
-using Marten.Events.Projections;
 using Marten.Exceptions;
 using Npgsql;
 using Oakton;
@@ -46,7 +46,7 @@ builder.Services.AddMarten(opts =>
 
 builder.Host.UseWolverine(opts =>
 {
-    opts.CodeGeneration.TypeLoadMode = TypeLoadMode.Static;
+    opts.CodeGeneration.TypeLoadMode = TypeLoadMode.Dynamic;
     
     // Let's build in some durability for transient errors
     opts.OnException<NpgsqlException>().Or<MartenCommandException>()
@@ -96,6 +96,9 @@ builder.Host.UseWolverine(opts =>
     });
 });
 
+builder.Services.AddWolverineHttp();
+builder.Services.AddAuthentication().AddJwtBearer();
+builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
