@@ -11,7 +11,7 @@ public class Customer
     
     public string? Region { get; set; }
     
-    public ContractDuration Duration { get; set; } 
+    public required ContractDuration Duration { get; set; } 
 }
 
 public record ContractDuration(DateOnly Start, DateOnly End);

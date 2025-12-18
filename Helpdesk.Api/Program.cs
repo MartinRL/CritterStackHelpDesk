@@ -21,13 +21,14 @@ builder.Host.ApplyOaktonExtensions();
 
 builder.Services.AddMarten(opts =>
 {
-    var connectionString = builder.Configuration.GetConnectionString("marten");
+    var connectionString = builder.Configuration.GetConnectionString("marten")
+        ?? throw new InvalidOperationException("Connection string 'marten' is not configured.");
     opts.Connection(connectionString);
     
     opts.Projections.Add<IncidentDetailsProjection>(ProjectionLifecycle.Inline);
 
     // This will create a btree index within the JSONB data
-    opts.Schema.For<Customer>().Index(x => x.Region);
+    opts.Schema.For<Customer>().Index(x => x.Region!);
 })
     // Adds Wolverine transactional middleware for Marten
     // and the Wolverine transactional outbox support as well
