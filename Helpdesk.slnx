@@ -6,6 +6,9 @@
     <File Path="README.md" />
     <File Path="CLAUDE.md" />
   </Folder>
+  <Folder Name="/docs/prompts/">
+    <File Path="prompts\Event Modeling Legacy System Analysis.md" />
+  </Folder>
   <Project Path="EventSourcingDemo/EventSourcingDemo.csproj" />
   <Project Path="Helpdesk.Api.Tests/Helpdesk.Api.Tests.csproj" />
   <Project Path="Helpdesk.Api/Helpdesk.Api.csproj" />
