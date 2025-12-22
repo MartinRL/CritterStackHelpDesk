@@ -1,0 +1,857 @@
+{
+  "slices": [
+    {
+      "id": "slice-1-log-incident",
+      "status": "Created",
+      "index": 1,
+      "title": "Log New Incident",
+      "context": "Customer creates a new helpdesk incident with contact information and description",
+      "sliceType": "STATE_CHANGE",
+      "commands": [
+        {
+          "id": "cmd-log-incident",
+          "title": "Log Incident",
+          "fields": [],
+          "type": "COMMAND",
+          "dependencies": [
+            {
+              "id": "screen-log-incident-form",
+              "type": "INBOUND",
+              "title": "Log Incident Form",
+              "elementType": "SCREEN"
+            },
+            {
+              "id": "evt-incident-logged",
+              "type": "OUTBOUND",
+              "title": "Incident Logged",
+              "elementType": "EVENT"
+            }
+          ],
+          "aggregate": "Incident",
+          "createsAggregate": true
+        }
+      ],
+      "events": [
+        {
+          "id": "evt-incident-logged",
+          "title": "Incident Logged",
+          "fields": [],
+          "type": "EVENT",
+          "dependencies": [
+            {
+              "id": "cmd-log-incident",
+              "type": "INBOUND",
+              "title": "Log Incident",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "readmodels": [],
+      "screens": [
+        {
+          "id": "screen-log-incident-form",
+          "title": "Log Incident Form",
+          "fields": [],
+          "type": "SCREEN",
+          "dependencies": [
+            {
+              "id": "cmd-log-incident",
+              "type": "OUTBOUND",
+              "title": "Log Incident",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "screenImages": [],
+      "processors": [],
+      "tables": [],
+      "specifications": [],
+      "actors": [
+        {
+          "name": "Customer",
+          "authzRequired": false
+        }
+      ],
+      "aggregates": ["Incident"]
+    },
+    {
+      "id": "slice-2-view-incident",
+      "status": "Created",
+      "index": 2,
+      "title": "View Incident Details",
+      "context": "Display the newly created incident with all available information",
+      "sliceType": "STATE_VIEW",
+      "commands": [],
+      "events": [],
+      "readmodels": [
+        {
+          "id": "rm-incident-details",
+          "title": "Incident Details",
+          "fields": [],
+          "type": "READMODEL",
+          "dependencies": [
+            {
+              "id": "evt-incident-logged",
+              "type": "INBOUND",
+              "title": "Incident Logged",
+              "elementType": "EVENT"
+            },
+            {
+              "id": "screen-incident-display",
+              "type": "OUTBOUND",
+              "title": "Incident Display",
+              "elementType": "SCREEN"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "screens": [
+        {
+          "id": "screen-incident-display",
+          "title": "Incident Display",
+          "fields": [],
+          "type": "SCREEN",
+          "dependencies": [
+            {
+              "id": "rm-incident-details",
+              "type": "INBOUND",
+              "title": "Incident Details",
+              "elementType": "READMODEL"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "screenImages": [],
+      "processors": [],
+      "tables": [],
+      "specifications": [],
+      "actors": [
+        {
+          "name": "Customer",
+          "authzRequired": false
+        },
+        {
+          "name": "Agent",
+          "authzRequired": true
+        }
+      ],
+      "aggregates": ["Incident"]
+    },
+    {
+      "id": "slice-3-categorize-incident",
+      "status": "Created",
+      "index": 3,
+      "title": "Categorize Incident",
+      "context": "Agent assigns a category to the incident (Software, Hardware, Network, Database)",
+      "sliceType": "STATE_CHANGE",
+      "commands": [
+        {
+          "id": "cmd-categorise-incident",
+          "title": "Categorise Incident",
+          "fields": [],
+          "type": "COMMAND",
+          "dependencies": [
+            {
+              "id": "screen-categorize-form",
+              "type": "INBOUND",
+              "title": "Categorize Form",
+              "elementType": "SCREEN"
+            },
+            {
+              "id": "evt-incident-categorised",
+              "type": "OUTBOUND",
+              "title": "Incident Categorised",
+              "elementType": "EVENT"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "events": [
+        {
+          "id": "evt-incident-categorised",
+          "title": "Incident Categorised",
+          "fields": [],
+          "type": "EVENT",
+          "dependencies": [
+            {
+              "id": "cmd-categorise-incident",
+              "type": "INBOUND",
+              "title": "Categorise Incident",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "readmodels": [],
+      "screens": [
+        {
+          "id": "screen-categorize-form",
+          "title": "Categorize Form",
+          "fields": [],
+          "type": "SCREEN",
+          "dependencies": [
+            {
+              "id": "rm-incident-details",
+              "type": "INBOUND",
+              "title": "Incident Details",
+              "elementType": "READMODEL"
+            },
+            {
+              "id": "cmd-categorise-incident",
+              "type": "OUTBOUND",
+              "title": "Categorise Incident",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "screenImages": [],
+      "processors": [],
+      "tables": [],
+      "specifications": [],
+      "actors": [
+        {
+          "name": "Agent",
+          "authzRequired": true
+        }
+      ],
+      "aggregates": ["Incident"]
+    },
+    {
+      "id": "slice-4-auto-assign-priority",
+      "status": "Created",
+      "index": 4,
+      "title": "Auto-Assign Priority",
+      "context": "System automatically assigns priority based on customer priority mappings when incident is categorized",
+      "sliceType": "AUTOMATION",
+      "commands": [
+        {
+          "id": "cmd-try-assign-priority",
+          "title": "Try Assign Priority",
+          "fields": [],
+          "type": "COMMAND",
+          "dependencies": [
+            {
+              "id": "proc-priority-assigner",
+              "type": "INBOUND",
+              "title": "Priority Assigner",
+              "elementType": "AUTOMATION"
+            },
+            {
+              "id": "evt-incident-prioritised",
+              "type": "OUTBOUND",
+              "title": "Incident Prioritised",
+              "elementType": "EVENT"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "events": [
+        {
+          "id": "evt-incident-prioritised",
+          "title": "Incident Prioritised",
+          "fields": [],
+          "type": "EVENT",
+          "dependencies": [
+            {
+              "id": "cmd-try-assign-priority",
+              "type": "INBOUND",
+              "title": "Try Assign Priority",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "readmodels": [],
+      "screens": [],
+      "screenImages": [],
+      "processors": [
+        {
+          "id": "proc-priority-assigner",
+          "title": "Priority Assigner",
+          "fields": [],
+          "type": "AUTOMATION",
+          "dependencies": [
+            {
+              "id": "evt-incident-categorised",
+              "type": "INBOUND",
+              "title": "Incident Categorised",
+              "elementType": "EVENT"
+            },
+            {
+              "id": "cmd-try-assign-priority",
+              "type": "OUTBOUND",
+              "title": "Try Assign Priority",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "tables": [],
+      "specifications": [],
+      "actors": [
+        {
+          "name": "System",
+          "authzRequired": false
+        }
+      ],
+      "aggregates": ["Incident"]
+    },
+    {
+      "id": "slice-5-view-updated-incident",
+      "status": "Created",
+      "index": 5,
+      "title": "View Updated Incident",
+      "context": "Display incident with assigned priority and category",
+      "sliceType": "STATE_VIEW",
+      "commands": [],
+      "events": [],
+      "readmodels": [
+        {
+          "id": "rm-incident-details-updated",
+          "title": "Incident Details",
+          "fields": [],
+          "type": "READMODEL",
+          "dependencies": [
+            {
+              "id": "evt-incident-categorised",
+              "type": "INBOUND",
+              "title": "Incident Categorised",
+              "elementType": "EVENT"
+            },
+            {
+              "id": "evt-incident-prioritised",
+              "type": "INBOUND",
+              "title": "Incident Prioritised",
+              "elementType": "EVENT"
+            },
+            {
+              "id": "screen-updated-incident",
+              "type": "OUTBOUND",
+              "title": "Updated Incident Display",
+              "elementType": "SCREEN"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "screens": [
+        {
+          "id": "screen-updated-incident",
+          "title": "Updated Incident Display",
+          "fields": [],
+          "type": "SCREEN",
+          "dependencies": [
+            {
+              "id": "rm-incident-details-updated",
+              "type": "INBOUND",
+              "title": "Incident Details",
+              "elementType": "READMODEL"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "screenImages": [],
+      "processors": [],
+      "tables": [],
+      "specifications": [],
+      "actors": [
+        {
+          "name": "Agent",
+          "authzRequired": true
+        }
+      ],
+      "aggregates": ["Incident"]
+    },
+    {
+      "id": "slice-6-critical-alert",
+      "status": "Created",
+      "index": 6,
+      "title": "Critical Priority Alert",
+      "context": "System triggers external notification when critical priority is assigned",
+      "sliceType": "AUTOMATION",
+      "commands": [
+        {
+          "id": "cmd-ring-alarms",
+          "title": "Ring All The Alarms",
+          "fields": [],
+          "type": "COMMAND",
+          "dependencies": [
+            {
+              "id": "proc-alert-dispatcher",
+              "type": "INBOUND",
+              "title": "Alert Dispatcher",
+              "elementType": "AUTOMATION"
+            }
+          ],
+          "aggregate": "Incident",
+          "service": "NotificationService"
+        }
+      ],
+      "events": [],
+      "readmodels": [],
+      "screens": [],
+      "screenImages": [],
+      "processors": [
+        {
+          "id": "proc-alert-dispatcher",
+          "title": "Alert Dispatcher",
+          "fields": [],
+          "type": "AUTOMATION",
+          "dependencies": [
+            {
+              "id": "evt-incident-prioritised",
+              "type": "INBOUND",
+              "title": "Incident Prioritised",
+              "elementType": "EVENT"
+            },
+            {
+              "id": "cmd-ring-alarms",
+              "type": "OUTBOUND",
+              "title": "Ring All The Alarms",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "tables": [],
+      "specifications": [],
+      "actors": [
+        {
+          "name": "System",
+          "authzRequired": false
+        }
+      ],
+      "aggregates": ["Incident"]
+    },
+    {
+      "id": "slice-7-agent-response",
+      "status": "Created",
+      "index": 7,
+      "title": "Agent Response",
+      "context": "Agent posts a response to the incident (visible to customer or internal note)",
+      "sliceType": "STATE_CHANGE",
+      "commands": [
+        {
+          "id": "cmd-agent-respond",
+          "title": "Agent Respond To Incident",
+          "fields": [],
+          "type": "COMMAND",
+          "dependencies": [
+            {
+              "id": "screen-agent-response-form",
+              "type": "INBOUND",
+              "title": "Agent Response Form",
+              "elementType": "SCREEN"
+            },
+            {
+              "id": "evt-agent-responded",
+              "type": "OUTBOUND",
+              "title": "Agent Responded To Incident",
+              "elementType": "EVENT"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "events": [
+        {
+          "id": "evt-agent-responded",
+          "title": "Agent Responded To Incident",
+          "fields": [],
+          "type": "EVENT",
+          "dependencies": [
+            {
+              "id": "cmd-agent-respond",
+              "type": "INBOUND",
+              "title": "Agent Respond To Incident",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "readmodels": [],
+      "screens": [
+        {
+          "id": "screen-agent-response-form",
+          "title": "Agent Response Form",
+          "fields": [],
+          "type": "SCREEN",
+          "dependencies": [
+            {
+              "id": "rm-incident-details",
+              "type": "INBOUND",
+              "title": "Incident Details",
+              "elementType": "READMODEL"
+            },
+            {
+              "id": "cmd-agent-respond",
+              "type": "OUTBOUND",
+              "title": "Agent Respond To Incident",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "screenImages": [],
+      "processors": [],
+      "tables": [],
+      "specifications": [],
+      "actors": [
+        {
+          "name": "Agent",
+          "authzRequired": true
+        }
+      ],
+      "aggregates": ["Incident"]
+    },
+    {
+      "id": "slice-8-customer-response",
+      "status": "Created",
+      "index": 8,
+      "title": "Customer Response",
+      "context": "Customer provides additional information or feedback on the incident",
+      "sliceType": "STATE_CHANGE",
+      "commands": [
+        {
+          "id": "cmd-customer-respond",
+          "title": "Customer Respond To Incident",
+          "fields": [],
+          "type": "COMMAND",
+          "dependencies": [
+            {
+              "id": "screen-customer-response-form",
+              "type": "INBOUND",
+              "title": "Customer Response Form",
+              "elementType": "SCREEN"
+            },
+            {
+              "id": "evt-customer-responded",
+              "type": "OUTBOUND",
+              "title": "Customer Responded To Incident",
+              "elementType": "EVENT"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "events": [
+        {
+          "id": "evt-customer-responded",
+          "title": "Customer Responded To Incident",
+          "fields": [],
+          "type": "EVENT",
+          "dependencies": [
+            {
+              "id": "cmd-customer-respond",
+              "type": "INBOUND",
+              "title": "Customer Respond To Incident",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "readmodels": [],
+      "screens": [
+        {
+          "id": "screen-customer-response-form",
+          "title": "Customer Response Form",
+          "fields": [],
+          "type": "SCREEN",
+          "dependencies": [
+            {
+              "id": "rm-incident-details",
+              "type": "INBOUND",
+              "title": "Incident Details",
+              "elementType": "READMODEL"
+            },
+            {
+              "id": "cmd-customer-respond",
+              "type": "OUTBOUND",
+              "title": "Customer Respond To Incident",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "screenImages": [],
+      "processors": [],
+      "tables": [],
+      "specifications": [],
+      "actors": [
+        {
+          "name": "Customer",
+          "authzRequired": false
+        }
+      ],
+      "aggregates": ["Incident"]
+    },
+    {
+      "id": "slice-9-resolve-incident",
+      "status": "Created",
+      "index": 9,
+      "title": "Resolve Incident",
+      "context": "Agent marks the incident as resolved with resolution type (Temporary, Permanent, Not An Incident)",
+      "sliceType": "STATE_CHANGE",
+      "commands": [
+        {
+          "id": "cmd-resolve-incident",
+          "title": "Resolve Incident",
+          "fields": [],
+          "type": "COMMAND",
+          "dependencies": [
+            {
+              "id": "screen-resolve-form",
+              "type": "INBOUND",
+              "title": "Resolve Incident Form",
+              "elementType": "SCREEN"
+            },
+            {
+              "id": "evt-incident-resolved",
+              "type": "OUTBOUND",
+              "title": "Incident Resolved",
+              "elementType": "EVENT"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "events": [
+        {
+          "id": "evt-incident-resolved",
+          "title": "Incident Resolved",
+          "fields": [],
+          "type": "EVENT",
+          "dependencies": [
+            {
+              "id": "cmd-resolve-incident",
+              "type": "INBOUND",
+              "title": "Resolve Incident",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "readmodels": [],
+      "screens": [
+        {
+          "id": "screen-resolve-form",
+          "title": "Resolve Incident Form",
+          "fields": [],
+          "type": "SCREEN",
+          "dependencies": [
+            {
+              "id": "rm-incident-details",
+              "type": "INBOUND",
+              "title": "Incident Details",
+              "elementType": "READMODEL"
+            },
+            {
+              "id": "cmd-resolve-incident",
+              "type": "OUTBOUND",
+              "title": "Resolve Incident",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "screenImages": [],
+      "processors": [],
+      "tables": [],
+      "specifications": [],
+      "actors": [
+        {
+          "name": "Agent",
+          "authzRequired": true
+        }
+      ],
+      "aggregates": ["Incident"]
+    },
+    {
+      "id": "slice-10-acknowledge-resolution",
+      "status": "Created",
+      "index": 10,
+      "title": "Acknowledge Resolution",
+      "context": "Customer acknowledges that the resolution is acceptable",
+      "sliceType": "STATE_CHANGE",
+      "commands": [
+        {
+          "id": "cmd-acknowledge-resolution",
+          "title": "Acknowledge Resolution",
+          "fields": [],
+          "type": "COMMAND",
+          "dependencies": [
+            {
+              "id": "screen-acknowledge-form",
+              "type": "INBOUND",
+              "title": "Acknowledgment Form",
+              "elementType": "SCREEN"
+            },
+            {
+              "id": "evt-resolution-acknowledged",
+              "type": "OUTBOUND",
+              "title": "Resolution Acknowledged By Customer",
+              "elementType": "EVENT"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "events": [
+        {
+          "id": "evt-resolution-acknowledged",
+          "title": "Resolution Acknowledged By Customer",
+          "fields": [],
+          "type": "EVENT",
+          "dependencies": [
+            {
+              "id": "cmd-acknowledge-resolution",
+              "type": "INBOUND",
+              "title": "Acknowledge Resolution",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "readmodels": [],
+      "screens": [
+        {
+          "id": "screen-acknowledge-form",
+          "title": "Acknowledgment Form",
+          "fields": [],
+          "type": "SCREEN",
+          "dependencies": [
+            {
+              "id": "rm-incident-details",
+              "type": "INBOUND",
+              "title": "Incident Details",
+              "elementType": "READMODEL"
+            },
+            {
+              "id": "cmd-acknowledge-resolution",
+              "type": "OUTBOUND",
+              "title": "Acknowledge Resolution",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "screenImages": [],
+      "processors": [],
+      "tables": [],
+      "specifications": [],
+      "actors": [
+        {
+          "name": "Customer",
+          "authzRequired": false
+        }
+      ],
+      "aggregates": ["Incident"]
+    },
+    {
+      "id": "slice-11-close-incident",
+      "status": "Created",
+      "index": 11,
+      "title": "Close Incident",
+      "context": "Final closure of the incident lifecycle",
+      "sliceType": "STATE_CHANGE",
+      "commands": [
+        {
+          "id": "cmd-close-incident",
+          "title": "Close Incident",
+          "fields": [],
+          "type": "COMMAND",
+          "dependencies": [
+            {
+              "id": "screen-close-form",
+              "type": "INBOUND",
+              "title": "Close Incident Form",
+              "elementType": "SCREEN"
+            },
+            {
+              "id": "evt-incident-closed",
+              "type": "OUTBOUND",
+              "title": "Incident Closed",
+              "elementType": "EVENT"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "events": [
+        {
+          "id": "evt-incident-closed",
+          "title": "Incident Closed",
+          "fields": [],
+          "type": "EVENT",
+          "dependencies": [
+            {
+              "id": "cmd-close-incident",
+              "type": "INBOUND",
+              "title": "Close Incident",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "readmodels": [],
+      "screens": [
+        {
+          "id": "screen-close-form",
+          "title": "Close Incident Form",
+          "fields": [],
+          "type": "SCREEN",
+          "dependencies": [
+            {
+              "id": "rm-incident-details",
+              "type": "INBOUND",
+              "title": "Incident Details",
+              "elementType": "READMODEL"
+            },
+            {
+              "id": "cmd-close-incident",
+              "type": "OUTBOUND",
+              "title": "Close Incident",
+              "elementType": "COMMAND"
+            }
+          ],
+          "aggregate": "Incident"
+        }
+      ],
+      "screenImages": [],
+      "processors": [],
+      "tables": [],
+      "specifications": [],
+      "actors": [
+        {
+          "name": "Agent",
+          "authzRequired": true
+        }
+      ],
+      "aggregates": ["Incident"]
+    }
+  ]
+}
