@@ -12,10 +12,10 @@ kanban-plugin: board
 
 ## Doing
 
-- [ ] net11 preview + C# 15 native `union` types in the Incident domain
 
 ## Done
 
+- [x] net11 preview + C# 15 native `union` types in the Incident domain
 - [x] Upgrade Critter Stack: Marten 9 / Wolverine 6
 - [x] Land in-flight net10 upgrade (TFMs, OpenApi swap, delete stray .sln)
 - [x] Create ticket board (BOARD.md, Obsidian Kanban)

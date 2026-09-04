@@ -57,6 +57,15 @@ public enum IncidentStatus
     Closed = 32
 }
 
+// C# 15 native closed union over the incident lifecycle events,
+// giving Apply() compiler-checked exhaustive pattern matching
+public union IncidentEvent(
+    AgentRespondedToIncident,
+    CustomerRespondedToIncident,
+    IncidentResolved,
+    ResolutionAcknowledgedByCustomer,
+    IncidentClosed);
+
 public record Incident(
     Guid Id,
     IncidentStatus Status,
@@ -66,20 +75,22 @@ public record Incident(
     public static Incident Create(IEvent<IncidentLogged> logged) =>
         new(logged.Id, IncidentStatus.Pending);
 
-    public Incident Apply(AgentRespondedToIncident agentResponded) =>
-        this with { HasOutstandingResponseToCustomer = false };
+    // Marten discovers aggregation methods by concrete event type,
+    // so these overloads funnel into the single exhaustive union switch
+    public Incident Apply(AgentRespondedToIncident e) => Apply((IncidentEvent)e);
+    public Incident Apply(CustomerRespondedToIncident e) => Apply((IncidentEvent)e);
+    public Incident Apply(IncidentResolved e) => Apply((IncidentEvent)e);
+    public Incident Apply(ResolutionAcknowledgedByCustomer e) => Apply((IncidentEvent)e);
+    public Incident Apply(IncidentClosed e) => Apply((IncidentEvent)e);
 
-    public Incident Apply(CustomerRespondedToIncident customerResponded) =>
-        this with { HasOutstandingResponseToCustomer = true };
-
-    public Incident Apply(IncidentResolved resolved) =>
-        this with { Status = IncidentStatus.Resolved };
-
-    public Incident Apply(ResolutionAcknowledgedByCustomer acknowledged) =>
-        this with { Status = IncidentStatus.ResolutionAcknowledgedByCustomer };
-
-    public Incident Apply(IncidentClosed closed) =>
-        this with { Status = IncidentStatus.Closed };
+    public Incident Apply(IncidentEvent @event) => @event switch
+    {
+        AgentRespondedToIncident => this with { HasOutstandingResponseToCustomer = false },
+        CustomerRespondedToIncident => this with { HasOutstandingResponseToCustomer = true },
+        IncidentResolved => this with { Status = IncidentStatus.Resolved },
+        ResolutionAcknowledgedByCustomer => this with { Status = IncidentStatus.ResolutionAcknowledgedByCustomer },
+        IncidentClosed => this with { Status = IncidentStatus.Closed }
+    };
 }
 
 public enum IncidentCategory
