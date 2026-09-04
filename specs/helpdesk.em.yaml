@@ -1,0 +1,576 @@
+# Helpdesk — Event-Modeling spec, reverse-engineered from the running Critter Stack
+# code (Helpdesk.Api). This spec is the intended single source of truth the C# domain
+# maps to 1:1. Syntax per emlang YAML (Emlang.Cli); conventions borrowed from
+# kvissig.se/specs/CLAUDE.md.
+#
+# Conventions:
+#   triggers carry the actor role + originating screen
+#                                  (🧑 Customer / Incident form, 🧑‍💼 Agent / Incident details,
+#                                   ⚙️ System / ...)
+#   commands are bare              (LogIncident, CategoriseIncident)
+#   events carry the stream        (Incident / IncidentLogged)
+#   exceptions are bare            (UnknownCustomer)
+#   screen views are bare data nouns; the decider's decision model carries the
+#   State / lane                   (State / Incident)
+#
+# Slice-name emoji: ✍️ state-change (writes the stream), 👀 state view (screens +
+# decider State). Automations are the Event-Modeling PROCESSOR pattern:
+#   event(s) -> read-model -> ⚙️ System trigger (the gear) -> command -> event(s)
+#
+# WIRE COMPATIBILITY: event names and props are EXACTLY the records in
+# Helpdesk.Api/Incident.cs — British spelling included (IncidentCategorised,
+# IncidentPrioritised) — so the generated domain replays the existing Marten streams.
+# Props are camelCase (the C# records PascalCase them; System.Text.Json default maps 1:1).
+#
+# Actor identity is CLAIM-SOURCED: loggedBy / userId / agentId / resolvedBy /
+# acknowledgedBy / closedBy come from the "user-id" claim via UserDetectionMiddleware
+# (Helpdesk.Api/UserDetectionMiddleware.cs), never from command props. Stated once here;
+# x: NoValidUser (missing/invalid claim) is listed only on the first slice and applies
+# to every command slice.
+#
+# Prop types (these annotations ARE the intended C# types):
+#   ids            Guid            (incidentId, customerId, loggedBy, userId, agentId,
+#                                   resolvedBy, acknowledgedBy, closedBy)
+#   timestamps     DateTimeOffset  (*At)
+#   category       IncidentCategory (Software|Hardware|Network|Database)   — enum
+#   priority       IncidentPriority (Critical|High|Medium|Low)             — enum
+#   resolution     ResolutionType  (Temporary|Permanent|NotAnIncident)     — enum
+#   status         IncidentStatus  (Pending|Resolved|ResolutionAcknowledgedByCustomer|Closed)
+#   contact        Contact { contactChannel: ContactChannel (Email|Phone|InPerson|GeneratedBySystem), firstName?: string, lastName?: string, emailAddress?: string, phoneNumber?: string }
+#   notes          IncidentNote[]  { type: IncidentNoteType (FromAgent|FromCustomer), from: Guid, content: string, visibleToCustomer: bool }
+#   version        int             (optimistic concurrency; IncidentDetails.Version)
+#
+# Test fixtures (referenced by name in the cases below):
+#   customer1Id — a known customer (BaselineData.Customer1Id); priorities map
+#                 Database -> Critical (customer1Priorities), no mapping for Network
+#   martinId    — the customer user issuing LogIncident (user-id claim)
+#   agentId     — the agent user (user-id claim)
+#   systemId    — the System's synthetic user id (CategoriseIncidentHandler.SystemId)
+#   emailContact = Contact { contactChannel: Email }
+
+slices:
+
+  # --- Intake ----------------------------------------------------------------
+
+  # From LogIncidentEndpoint (LogIncident.cs): FluentValidation guards description
+  # (NotEmpty) and contact (NotNull); [WolverineBefore] middleware guards the customer
+  # document lookup (UnknownCustomer); UserDetectionMiddleware guards the claim
+  # (NoValidUser). incidentId is MINTED by MartenOps.StartStream<Incident>.
+  # Tests trace to LogIncident_handling.cs.
+  ✍️ Log New Incident:
+    steps:
+      - t: 🧑 Customer / Incident form
+      - c: LogIncident
+        props:
+          customerId: Guid
+          contact: Contact
+          description: string
+      - x: NoValidUser
+      - x: UnknownCustomer
+      - x: DescriptionRequired
+      - x: ContactRequired
+      - e: Incident / IncidentLogged
+        props:
+          incidentId: Guid          # minted stream id (MartenOps.StartStream)
+          customerId: Guid
+          contact: Contact
+          description: string
+          loggedBy: Guid            # from the user-id claim
+      - v: Incident details
+    tests:
+      # customer1Id exists in the Customer reference data (BaselineData seed);
+      # UnknownCustomer is a document lookup, not stream state, so given stays [].
+      incident can be logged:
+        given: []
+        when:
+          - c: LogIncident
+            props: { customerId: customer1Id, contact: emailContact, description: It's broken }
+        then:
+          - e: Incident / IncidentLogged
+            props:
+              incidentId: minted
+              customerId: customer1Id
+              contact: emailContact
+              description: It's broken
+              loggedBy: martinId
+      cannot log incident for unknown customer:
+        given: []
+        when:
+          - c: LogIncident
+            props: { customerId: unknown, contact: emailContact, description: It's broken }
+        then:
+          - x: UnknownCustomer
+      cannot log incident without description:
+        given: []
+        when:
+          - c: LogIncident
+            props: { customerId: customer1Id, contact: emailContact, description: "" }
+        then:
+          - x: DescriptionRequired
+
+  # Mirrors IncidentDetails.cs — the inline SingleStreamProjection read model.
+  👀 View Incident Details:
+    steps:
+      - v: Incident details
+        props:
+          incidentId: Guid
+          customerId: Guid
+          status: IncidentStatus (Pending|Resolved|ResolutionAcknowledgedByCustomer|Closed)
+          notes: IncidentNote[]     # { type: IncidentNoteType, from: Guid, content: string, visibleToCustomer: bool }
+          category: IncidentCategory?
+          priority: IncidentPriority?
+          agentId: Guid?
+          version: int
+    tests:
+      new incident shows as pending with no notes:
+        given:
+          - e: Incident / IncidentLogged
+            props: { incidentId: incident1Id, customerId: customer1Id, contact: emailContact, description: It's broken, loggedBy: martinId }
+        then:
+          - v: Incident details
+            props:
+              incidentId: incident1Id
+              customerId: customer1Id
+              status: Pending
+              notes: []
+
+  # --- Triage ----------------------------------------------------------------
+
+  # From CategoriseIncidentEndpoint (CategoriseIncident.cs). WIRE NAME: the code's
+  # command prop is `Id` ([Identity, JsonPropertyName("Id")]) — spec-named incidentId
+  # for clarity; the generated command keeps the Id wire name. Validator guards
+  # Version > 0 (InvalidVersion) and Id not empty (IncidentIdRequired).
+  # Tests trace to CategoriseIncidentTests.cs + categorise_incidents_end_to_end.cs.
+  ✍️ Categorise Incident:
+    steps:
+      - t: 🧑‍💼 Agent / Incident details
+      - c: CategoriseIncident
+        props:
+          incidentId: Guid          # wire name "Id" in the existing API
+          category: IncidentCategory (Software|Hardware|Network|Database)
+          version: int              # optimistic concurrency, must be > 0
+      - x: InvalidVersion
+      - x: IncidentIdRequired
+      - e: Incident / IncidentCategorised
+        props:
+          category: IncidentCategory (Software|Hardware|Network|Database)
+          userId: Guid              # from the user-id claim
+      - v: Incident details
+    tests:
+      changed category is recorded:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Pending
+              category: Hardware
+        when:
+          - c: CategoriseIncident
+            props: { incidentId: incident1Id, category: Database, version: 1 }
+        then:
+          - e: Incident / IncidentCategorised
+            props: { category: Database, userId: agentId }
+      unchanged category is a no-op:
+        # decide returns no events when existing.Category == command.Category
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Pending
+              category: Database
+        when:
+          - c: CategoriseIncident
+            props: { incidentId: incident1Id, category: Database, version: 1 }
+        then: []
+      cannot categorise with version zero:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Pending
+        when:
+          - c: CategoriseIncident
+            props: { incidentId: incident1Id, category: Database, version: 0 }
+        then:
+          - x: InvalidVersion
+
+  # PROCESSOR: IncidentCategorised is event-forwarded to TryAssignPriority
+  # (IntegrateWithWolverine + SubscribeToEvent in Program.cs). The gear reads the
+  # customer's category->priority mapping (Customer.Priorities dictionary, normalized
+  # here to a CategoryPriority[] read model) and prioritises the incident.
+  # Guards from TryAssignPriorityHandler.Handle: no category, no mapping, or an
+  # already-matching priority all decide to no events.
+  ✍️ Auto-Assign Priority:
+    steps:
+      - e: Incident / IncidentCategorised
+      - v: Customer priorities
+        props:
+          customerId: Guid
+          priorities: CategoryPriority[]   # { category: IncidentCategory, priority: IncidentPriority } — normalized from Customer.Priorities
+      - t: ⚙️ System / Assign priority
+      - c: TryAssignPriority
+        props:
+          incidentId: Guid
+          userId: Guid              # the acting system/user identity stamped on the event
+      - e: Incident / IncidentPrioritised
+        props:
+          priority: IncidentPriority (Critical|High|Medium|Low)
+          userId: Guid
+      - v: Incident details
+    tests:
+      customer mapping assigns the priority:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Pending
+              category: Database
+          - v: Customer priorities
+            props: { customerId: customer1Id, priorities: [customer1Priorities] }   # Database -> Critical
+        when:
+          - c: TryAssignPriority
+            props: { incidentId: incident1Id, userId: systemId }
+        then:
+          - e: Incident / IncidentPrioritised
+            props: { priority: Critical, userId: systemId }
+      no mapping for the category is a no-op:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Pending
+              category: Network     # customer1 has no Network mapping
+          - v: Customer priorities
+            props: { customerId: customer1Id, priorities: [customer1Priorities] }
+        when:
+          - c: TryAssignPriority
+            props: { incidentId: incident1Id, userId: systemId }
+        then: []
+      already-matching priority is a no-op:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Pending
+              category: Database
+              priority: Critical    # already what the mapping says
+          - v: Customer priorities
+            props: { customerId: customer1Id, priorities: [customer1Priorities] }
+        when:
+          - c: TryAssignPriority
+            props: { incidentId: incident1Id, userId: systemId }
+        then: []
+      uncategorised incident is a no-op:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Pending       # category still null
+          - v: Customer priorities
+            props: { customerId: customer1Id, priorities: [customer1Priorities] }
+        when:
+          - c: TryAssignPriority
+            props: { incidentId: incident1Id, userId: systemId }
+        then: []
+
+  👀 View Updated Incident:
+    steps:
+      - v: Incident details
+    tests:
+      triaged incident shows category and priority:
+        given:
+          - e: Incident / IncidentLogged
+            props: { incidentId: incident1Id, customerId: customer1Id, contact: emailContact, description: It's broken, loggedBy: martinId }
+          - e: Incident / IncidentCategorised
+            props: { category: Database, userId: agentId }
+          - e: Incident / IncidentPrioritised
+            props: { priority: Critical, userId: systemId }
+        then:
+          - v: Incident details
+            props:
+              incidentId: incident1Id
+              status: Pending
+              category: Database
+              priority: Critical
+
+  # PROCESSOR: from TryAssignPriorityHandler — when the assigned priority is Critical,
+  # RingAllTheAlarms is published as an OUTGOING MESSAGE to NotificationService
+  # (RabbitMQ). The slice ends at the command: emlang has no outgoing-message element
+  # and a GWT `then:` cannot carry a command, so the two branch cases are documented
+  # here instead of as tests:
+  #   Critical priority rings   — IncidentPrioritised(Critical) -> RingAllTheAlarms published
+  #   High priority stays quiet — IncidentPrioritised(High)     -> nothing published
+  # Both branches live in TryAssignPriorityHandler.Handle and are covered by the
+  # Auto-Assign Priority tests' decide-path.
+  ✍️ Critical Priority Alert:
+    steps:
+      - e: Incident / IncidentPrioritised
+      - t: ⚙️ System / Alert dispatcher
+      - c: RingAllTheAlarms
+        props:
+          incidentId: Guid
+
+  # --- Conversation ----------------------------------------------------------
+  # The events below exist in Incident.cs and fold in the Incident aggregate, but no
+  # HTTP endpoint produces them yet — commands and guards are INFERRED.
+
+  # ASSUMPTION: inferred command; no endpoint exists. agentId comes from the user-id
+  # claim. IncidentAlreadyClosed is the inferred lifecycle guard (a closed incident
+  # accepts no further conversation).
+  ✍️ Agent Responds:
+    steps:
+      - t: 🧑‍💼 Agent / Incident details
+      - c: RecordAgentResponse
+        props:
+          incidentId: Guid
+          content: string
+          visibleToCustomer: bool
+      - x: IncidentAlreadyClosed
+      - e: Incident / AgentRespondedToIncident
+        props:
+          agentId: Guid             # from the user-id claim
+          content: string
+          visibleToCustomer: bool
+      - v: Incident details
+    tests:
+      agent response is recorded:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Pending
+        when:
+          - c: RecordAgentResponse
+            props: { incidentId: incident1Id, content: try rebooting, visibleToCustomer: true }
+        then:
+          - e: Incident / AgentRespondedToIncident
+            props: { agentId: agentId, content: try rebooting, visibleToCustomer: true }
+      cannot respond to a closed incident:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Closed
+        when:
+          - c: RecordAgentResponse
+            props: { incidentId: incident1Id, content: try rebooting, visibleToCustomer: true }
+        then:
+          - x: IncidentAlreadyClosed
+
+  # ASSUMPTION: inferred command; no endpoint exists. userId from the user-id claim.
+  ✍️ Customer Responds:
+    steps:
+      - t: 🧑 Customer / Incident details
+      - c: RecordCustomerResponse
+        props:
+          incidentId: Guid
+          content: string
+      - x: IncidentAlreadyClosed
+      - e: Incident / CustomerRespondedToIncident
+        props:
+          userId: Guid              # from the user-id claim
+          content: string
+      - v: Incident details
+    tests:
+      customer response is recorded:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Pending
+        when:
+          - c: RecordCustomerResponse
+            props: { incidentId: incident1Id, content: still broken }
+        then:
+          - e: Incident / CustomerRespondedToIncident
+            props: { userId: martinId, content: still broken }
+      cannot respond to a closed incident:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Closed
+        when:
+          - c: RecordCustomerResponse
+            props: { incidentId: incident1Id, content: still broken }
+        then:
+          - x: IncidentAlreadyClosed
+
+  # --- Resolution lifecycle --------------------------------------------------
+
+  # ASSUMPTION: inferred command; no endpoint exists. resolvedBy from the user-id
+  # claim; resolvedAt stamped by the shell.
+  ✍️ Resolve Incident:
+    steps:
+      - t: 🧑‍💼 Agent / Incident details
+      - c: ResolveIncident
+        props:
+          incidentId: Guid
+          resolution: ResolutionType (Temporary|Permanent|NotAnIncident)
+      - x: IncidentAlreadyClosed
+      - e: Incident / IncidentResolved
+        props:
+          resolution: ResolutionType (Temporary|Permanent|NotAnIncident)
+          resolvedBy: Guid          # from the user-id claim
+          resolvedAt: DateTimeOffset
+      - v: Incident details
+    tests:
+      incident can be resolved:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Pending
+        when:
+          - c: ResolveIncident
+            props: { incidentId: incident1Id, resolution: Permanent }
+        then:
+          - e: Incident / IncidentResolved
+            props: { resolution: Permanent, resolvedBy: agentId, resolvedAt: resolvedAt }
+      cannot resolve a closed incident:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Closed
+        when:
+          - c: ResolveIncident
+            props: { incidentId: incident1Id, resolution: Permanent }
+        then:
+          - x: IncidentAlreadyClosed
+
+  # ASSUMPTION: inferred command; no endpoint exists. acknowledgedBy from the user-id
+  # claim. IncidentNotResolved is the inferred guard: only a Resolved incident can be
+  # acknowledged (IncidentStatus lifecycle order).
+  ✍️ Acknowledge Resolution:
+    steps:
+      - t: 🧑 Customer / Incident details
+      - c: AcknowledgeResolution
+        props:
+          incidentId: Guid
+      - x: IncidentNotResolved
+      - e: Incident / ResolutionAcknowledgedByCustomer
+        props:
+          incidentId: Guid
+          acknowledgedBy: Guid      # from the user-id claim
+          acknowledgedAt: DateTimeOffset
+      - v: Incident details
+    tests:
+      resolution can be acknowledged:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Resolved
+        when:
+          - c: AcknowledgeResolution
+            props: { incidentId: incident1Id }
+        then:
+          - e: Incident / ResolutionAcknowledgedByCustomer
+            props: { incidentId: incident1Id, acknowledgedBy: martinId, acknowledgedAt: acknowledgedAt }
+      cannot acknowledge an unresolved incident:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Pending
+        when:
+          - c: AcknowledgeResolution
+            props: { incidentId: incident1Id }
+        then:
+          - x: IncidentNotResolved
+
+  # ASSUMPTION: inferred command; no endpoint exists. closedBy from the user-id claim.
+  # ResolutionNotAcknowledged is the inferred guard: closing requires the customer's
+  # acknowledgement first (IncidentStatus lifecycle order).
+  ✍️ Close Incident:
+    steps:
+      - t: 🧑‍💼 Agent / Incident details
+      - c: CloseIncident
+        props:
+          incidentId: Guid
+      - x: ResolutionNotAcknowledged
+      - x: IncidentAlreadyClosed
+      - e: Incident / IncidentClosed
+        props:
+          incidentId: Guid
+          closedBy: Guid            # from the user-id claim
+          closedAt: DateTimeOffset
+      - v: Incident details
+    tests:
+      acknowledged incident can be closed:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: ResolutionAcknowledgedByCustomer
+        when:
+          - c: CloseIncident
+            props: { incidentId: incident1Id }
+        then:
+          - e: Incident / IncidentClosed
+            props: { incidentId: incident1Id, closedBy: agentId, closedAt: closedAt }
+      cannot close before the customer acknowledges:
+        given:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Resolved
+        when:
+          - c: CloseIncident
+            props: { incidentId: incident1Id }
+        then:
+          - x: ResolutionNotAcknowledged
+
+  # --- Decision model (decider State) — APPENDIX, not a timeline step ---------
+
+  # The folded IncidentState the decider's `decide` reads — referenced by the Given of
+  # every command slice above. Mirrors the Incident aggregate (Incident.cs) widened
+  # with the IncidentDetails props decide needs (category/priority for triage guards).
+  # Fold tests are mined from IncidentAggregateTests.cs.
+  # NOTE: AgentAssignedToIncident { agentId: Guid } exists in Incident.cs and folds
+  # into IncidentDetails.AgentId, but no slice produces it yet — carried here for
+  # wire compatibility only.
+  👀 Decision Model:
+    steps:
+      - v: State / Incident
+        props:
+          incidentId: Guid
+          customerId: Guid
+          status: IncidentStatus (Pending|Resolved|ResolutionAcknowledgedByCustomer|Closed)
+          category: IncidentCategory?
+          priority: IncidentPriority?
+          agentId: Guid?
+          notes: IncidentNote[]
+          hasOutstandingResponseToCustomer: bool
+          version: int
+    tests:
+      customer response flags an outstanding reply and agent response clears it:
+        given:
+          - e: Incident / IncidentLogged
+            props: { incidentId: incident1Id, customerId: customer1Id, contact: emailContact, description: It's broken, loggedBy: martinId }
+          - e: Incident / CustomerRespondedToIncident
+            props: { userId: martinId, content: still broken }
+          - e: Incident / AgentRespondedToIncident
+            props: { agentId: agentId, content: try rebooting, visibleToCustomer: true }
+        then:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Pending
+              hasOutstandingResponseToCustomer: false   # customer set it true, agent cleared it
+      lifecycle folds through resolved and acknowledged to closed:
+        given:
+          - e: Incident / IncidentLogged
+            props: { incidentId: incident1Id, customerId: customer1Id, contact: emailContact, description: It's broken, loggedBy: martinId }
+          - e: Incident / IncidentResolved
+            props: { resolution: Permanent, resolvedBy: agentId, resolvedAt: resolvedAt }
+          - e: Incident / ResolutionAcknowledgedByCustomer
+            props: { incidentId: incident1Id, acknowledgedBy: martinId, acknowledgedAt: acknowledgedAt }
+          - e: Incident / IncidentClosed
+            props: { incidentId: incident1Id, closedBy: agentId, closedAt: closedAt }
+        then:
+          - v: State / Incident
+            props:
+              incidentId: incident1Id
+              status: Closed

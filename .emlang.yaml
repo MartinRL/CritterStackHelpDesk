@@ -1,0 +1,8 @@
+# emlang configuration for CritterStackHelpDesk
+lint:
+  ignore:
+    # Standalone read-model (view-only) slices legitimately have no events.
+    - slice-missing-event
+    # Critical Priority Alert ends at RingAllTheAlarms: an OUTGOING MESSAGE to
+    # NotificationService, not a stream command — emlang has no message element.
+    - command-without-event
