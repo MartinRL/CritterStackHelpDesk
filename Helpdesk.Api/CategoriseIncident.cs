@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json.Serialization;
 using FluentValidation;
+using JasperFx;
 using Marten;
 using Marten.Schema;
 using Wolverine;

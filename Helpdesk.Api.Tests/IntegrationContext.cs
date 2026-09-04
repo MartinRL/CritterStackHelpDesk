@@ -6,7 +6,7 @@ using Marten;
 using Marten.Schema;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
-using Oakton;
+using JasperFx.CommandLine;
 using Wolverine;
 using Wolverine.Tracking;
 using Xunit;
@@ -22,9 +22,9 @@ public class AppFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         // Sorry folks, but this is absolutely necessary if you 
-        // use Oakton for command line processing and want to 
+        // use JasperFx for command line processing and want to
         // use WebApplicationFactory and/or Alba for integration testing
-        OaktonEnvironment.AutoStartHost = true;
+        JasperFxEnvironment.AutoStartHost = true;
 
         // This is bootstrapping the actual application using
         // its implied Program.Main() set up

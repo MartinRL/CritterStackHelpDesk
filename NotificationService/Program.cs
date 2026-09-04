@@ -2,7 +2,7 @@
 
 using Helpdesk.Api;
 using Microsoft.Extensions.Hosting;
-using Oakton;
+using JasperFx;
 using Wolverine;
 using Wolverine.RabbitMQ;
 
@@ -12,7 +12,7 @@ return await Host.CreateDefaultBuilder()
         opts.UseRabbitMq();
 
         opts.ListenToRabbitQueue("notifications");
-    }).RunOaktonCommands(args);
+    }).RunJasperFxCommands(args);
 
 
 public static class RingAllTheAlarmsHandler

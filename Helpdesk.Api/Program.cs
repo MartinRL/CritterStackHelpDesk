@@ -5,7 +5,7 @@ using JasperFx.Events.Projections;
 using Marten;
 using Marten.Exceptions;
 using Npgsql;
-using Oakton;
+using JasperFx;
 using Wolverine;
 using Wolverine.ErrorHandling;
 using Wolverine.FluentValidation;
@@ -17,7 +17,7 @@ using Wolverine.RabbitMQ;
 var builder = WebApplication.CreateBuilder(args);
 
 // Adds in some diagnostics
-builder.Host.ApplyOaktonExtensions();
+builder.Host.ApplyJasperFxExtensions();
 
 builder.Services.AddMarten(opts =>
 {
@@ -32,12 +32,12 @@ builder.Services.AddMarten(opts =>
 })
     // Adds Wolverine transactional middleware for Marten
     // and the Wolverine transactional outbox support as well
-    .IntegrateWithWolverine()
-    
-    .EventForwardingToWolverine(opts =>
+    .IntegrateWithWolverine(integration =>
     {
+        integration.UseFastEventForwarding = true;
+
         // Setting up a little transformation of an event with event metadata to an internal command message
-        opts.SubscribeToEvent<IncidentCategorised>().TransformedTo(e => new TryAssignPriority
+        integration.SubscribeToEvent<IncidentCategorised>().TransformedTo(e => new TryAssignPriority
         {
             IncidentId = e.StreamId,
             UserId = e.Data.UserId
@@ -127,4 +127,4 @@ app.MapWolverineEndpoints(opts =>
 
 // This is important for Wolverine/Marten diagnostics 
 // and environment management
-return await app.RunOaktonCommands(args);
+return await app.RunJasperFxCommands(args);
