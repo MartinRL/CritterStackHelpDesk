@@ -529,6 +529,9 @@ slices:
   # every command slice above. Mirrors the Incident aggregate (Incident.cs) widened
   # with the IncidentDetails props decide needs (category/priority for triage guards).
   # Fold tests are mined from IncidentAggregateTests.cs.
+  # Decide always receives state; for creation, `given: []` = empty stream folded to
+  # Incident.Initial (code sentinel NotLogged, kept out of the spec's status enum
+  # like kvissig's NotCreated).
   # NOTE: AgentAssignedToIncident { agentId: Guid } exists in Incident.cs and folds
   # into IncidentDetails.AgentId, but no slice produces it yet — carried here for
   # wire compatibility only.

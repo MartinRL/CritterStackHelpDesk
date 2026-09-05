@@ -50,12 +50,7 @@ public static class LogIncidentEndpoint
     [WolverinePost("/api/incidents")]
     public static (NewIncidentResponse, IStartStream) Post(LogIncident command, User user)
     {
-        var logged = new IncidentLogged(
-            command.CustomerId, 
-            command.Contact, 
-            command.Description, 
-            user.Id);
-
+        var logged = Incident.Decide(Incident.Initial, command, user.Id);
         var op = MartenOps.StartStream<Incident>(logged);
         
         return (new NewIncidentResponse(op.StreamId), op);

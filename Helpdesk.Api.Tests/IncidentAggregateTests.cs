@@ -25,4 +25,22 @@ public class IncidentAggregateTests
         incident.Apply(new IncidentClosed(incident.Id, Guid.NewGuid(), DateTimeOffset.UtcNow))
             .Status.ShouldBe(IncidentStatus.Closed);
     }
+
+    [Fact]
+    public void creation_decide_receives_initial_and_evolves_to_pending()
+    {
+        Incident.Initial.Status.ShouldBe(IncidentStatus.NotLogged);
+
+        var command = new LogIncident(Guid.NewGuid(), new Contact(ContactChannel.Email), "it broke");
+        var userId = Guid.NewGuid();
+
+        var logged = Incident.Decide(Incident.Initial, command, userId);
+
+        logged.CustomerId.ShouldBe(command.CustomerId);
+        logged.Contact.ShouldBe(command.Contact);
+        logged.Description.ShouldBe(command.Description);
+        logged.LoggedBy.ShouldBe(userId);
+
+        Incident.Initial.Apply(logged).Status.ShouldBe(IncidentStatus.Pending);
+    }
 }

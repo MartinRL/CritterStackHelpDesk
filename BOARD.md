@@ -18,6 +18,7 @@ kanban-plugin: board
 
 ## Done
 
+- [x] Decider-true creation: Incident.Initial + Decide(state, cmd) receives initialState (Log New Incident)
 - [x] Reverse-engineer emlang spec from the Incident domain (specs/helpdesk.em.yaml, lint green)
 - [x] net11 preview + C# 15 native `union` types in the Incident domain
 - [x] Upgrade Critter Stack: Marten 9 / Wolverine 6
