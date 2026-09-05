@@ -400,3 +400,6 @@ FodyWeavers.xsd
 
 # Obsidian vault config
 .obsidian/
+
+# emlang diagram artifacts (generated)
+specs/*.em.html
