@@ -35,7 +35,8 @@
 #   category       IncidentCategory (Software|Hardware|Network|Database)   — enum
 #   priority       IncidentPriority (Critical|High|Medium|Low)             — enum
 #   resolution     ResolutionType  (Temporary|Permanent|NotAnIncident)     — enum
-#   status         IncidentStatus  (Pending|Resolved|ResolutionAcknowledgedByCustomer|Closed)
+#   status         IncidentStatus  (NotLogged|Pending|Resolved|ResolutionAcknowledgedByCustomer|Closed)
+#                                   NotLogged = the empty-stream sentinel (Incident.Initial)
 #   contact        Contact { contactChannel: ContactChannel (Email|Phone|InPerson|GeneratedBySystem), firstName?: string, lastName?: string, emailAddress?: string, phoneNumber?: string }
 #   notes          IncidentNote[]  { type: IncidentNoteType (FromAgent|FromCustomer), from: Guid, content: string, visibleToCustomer: bool }
 #   version        int             (optimistic concurrency; IncidentDetails.Version)
@@ -78,11 +79,14 @@ slices:
           loggedBy: Guid            # from the user-id claim
       - v: Incident details
     tests:
-      # given: [] = the empty stream = the decider's initialState (creation slice).
+      # Creation given = Incident.Initial (the empty stream folded): status NotLogged,
+      # the empty-stream sentinel — drawn so the diagram shows state flowing into decide.
       # The Customer lookup is a shell dependency ([WolverineBefore] middleware,
       # BaselineData seed) — reference data, never drawn as a given.
       incident can be logged:
-        given: []
+        given:
+          - v: State / Incident
+            props: { status: NotLogged }
         when:
           - c: LogIncident
             props: { customerId: customer1Id, contact: emailContact, description: It's broken }
@@ -95,14 +99,18 @@ slices:
               description: It's broken
               loggedBy: martinId
       cannot log incident for unknown customer:
-        given: []
+        given:
+          - v: State / Incident
+            props: { status: NotLogged }
         when:
           - c: LogIncident
             props: { customerId: unknown, contact: emailContact, description: It's broken }
         then:
           - x: UnknownCustomer
       cannot log incident without description:
-        given: []
+        given:
+          - v: State / Incident
+            props: { status: NotLogged }
         when:
           - c: LogIncident
             props: { customerId: customer1Id, contact: emailContact, description: "" }
@@ -529,9 +537,8 @@ slices:
   # every command slice above. Mirrors the Incident aggregate (Incident.cs) widened
   # with the IncidentDetails props decide needs (category/priority for triage guards).
   # Fold tests are mined from IncidentAggregateTests.cs.
-  # Decide always receives state; for creation, `given: []` = empty stream folded to
-  # Incident.Initial (code sentinel NotLogged, kept out of the spec's status enum
-  # like kvissig's NotCreated).
+  # Decide always receives state; creation givens draw Incident.Initial (the empty
+  # stream folded): status NotLogged, the empty-stream sentinel.
   # NOTE: AgentAssignedToIncident { agentId: Guid } exists in Incident.cs and folds
   # into IncidentDetails.AgentId, but no slice produces it yet — carried here for
   # wire compatibility only.
@@ -541,7 +548,7 @@ slices:
         props:
           incidentId: Guid
           customerId: Guid
-          status: IncidentStatus (Pending|Resolved|ResolutionAcknowledgedByCustomer|Closed)
+          status: IncidentStatus (NotLogged|Pending|Resolved|ResolutionAcknowledgedByCustomer|Closed)
           category: IncidentCategory?
           priority: IncidentPriority?
           agentId: Guid?
