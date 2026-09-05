@@ -12,10 +12,6 @@
 #   exceptions are bare            (UnknownCustomer)
 #   screen views are bare data nouns; the decider's decision model carries the
 #   State / lane                   (State / Incident)
-#   decider-true givens ALWAYS name the state — creation slices reference
-#   State / Incident at initialState, never a bare `given: []`
-#   reference-data views (Customer directory, Customer priorities) are
-#   shell-resolved lookups drawn as EM read-model steps, NOT decider state
 #
 # Slice-name emoji: ✍️ state-change (writes the stream), 👀 state view (screens +
 # decider State). Automations are the Event-Modeling PROCESSOR pattern:
@@ -63,9 +59,6 @@ slices:
   # Tests trace to LogIncident_handling.cs.
   ✍️ Log New Incident:
     steps:
-      - v: Customer directory       # reference data resolved by the SHELL
-        props:                      # ([WolverineBefore] Customer doc lookup) —
-          customerIds: Guid[]       # NOT decider state; decide never sees it
       - t: 🧑 Customer / Incident form
       - c: LogIncident
         props:
@@ -85,15 +78,11 @@ slices:
           loggedBy: Guid            # from the user-id claim
       - v: Incident details
     tests:
-      # customer1Id exists in the Customer directory (BaselineData seed).
-      # decide(command, state) takes exactly ONE state; for a creation command
-      # that is the decider's initialState (empty stream, nothing folded), so
-      # every given below names State / Incident explicitly.
+      # given: [] = the empty stream = the decider's initialState (creation slice).
+      # The Customer lookup is a shell dependency ([WolverineBefore] middleware,
+      # BaselineData seed) — reference data, never drawn as a given.
       incident can be logged:
-        given:
-          - v: State / Incident     # initialState — empty stream, nothing folded yet
-          - v: Customer directory
-            props: { customerIds: [customer1Id] }
+        given: []
         when:
           - c: LogIncident
             props: { customerId: customer1Id, contact: emailContact, description: It's broken }
@@ -106,21 +95,14 @@ slices:
               description: It's broken
               loggedBy: martinId
       cannot log incident for unknown customer:
-        given:
-          - v: State / Incident     # initialState — empty stream, nothing folded yet
-          - v: Customer directory
-            props: { customerIds: [customer1Id] }
+        given: []
         when:
           - c: LogIncident
             props: { customerId: unknown, contact: emailContact, description: It's broken }
         then:
           - x: UnknownCustomer
       cannot log incident without description:
-        # validation fires regardless of state, but the state is stated
-        given:
-          - v: State / Incident     # initialState — empty stream, nothing folded yet
-          - v: Customer directory
-            props: { customerIds: [customer1Id] }
+        given: []
         when:
           - c: LogIncident
             props: { customerId: customer1Id, contact: emailContact, description: "" }
@@ -547,10 +529,6 @@ slices:
   # every command slice above. Mirrors the Incident aggregate (Incident.cs) widened
   # with the IncidentDetails props decide needs (category/priority for triage guards).
   # Fold tests are mined from IncidentAggregateTests.cs.
-# The Decider triple is (initialState, decide, evolve): initialState is the
-# not-yet-logged Incident (empty stream); IncidentLogged is the creation event
-# that folds it into a live state (Incident.Create in Incident.cs). Every
-# creation GWT's given references State / Incident at initialState.
   # NOTE: AgentAssignedToIncident { agentId: Guid } exists in Incident.cs and folds
   # into IncidentDetails.AgentId, but no slice produces it yet — carried here for
   # wire compatibility only.
