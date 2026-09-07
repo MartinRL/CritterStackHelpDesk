@@ -13,6 +13,13 @@
 #   screen views are bare data nouns; the decider's decision model carries the
 #   State / lane                   (State / Incident)
 #
+# DECIDER GWT RULE: decide(state, command) -> events. Every ✍️ test gives exactly ONE
+# view, State / Incident, and nothing else. Reference data (Customer directory,
+# Customer priorities) is resolved by the shell / the gear and reaches decide as
+# command props, never as a second given. Evolve is tested in 👀 Decision Model
+# (given events, then State / Incident). NOTE: the diagram renders State / Incident
+# as a bare "Incident" card (renderer drops the lane label); green = view, orange = event.
+#
 # Slice-name emoji: ✍️ state-change (writes the stream), 👀 state view (screens +
 # decider State). Automations are the Event-Modeling PROCESSOR pattern:
 #   event(s) -> read-model -> ⚙️ System trigger (the gear) -> command -> event(s)
@@ -203,12 +210,18 @@ slices:
         then:
           - x: InvalidVersion
 
-  # PROCESSOR: IncidentCategorised is event-forwarded to TryAssignPriority
-  # (IntegrateWithWolverine + SubscribeToEvent in Program.cs). The gear reads the
+  # PROCESSOR: IncidentCategorised is event-forwarded to the gear
+  # (IntegrateWithWolverine + SubscribeToEvent in Program.cs). The GEAR reads the
   # customer's category->priority mapping (Customer.Priorities dictionary, normalized
-  # here to a CategoryPriority[] read model) and prioritises the incident.
-  # Guards from TryAssignPriorityHandler.Handle: no category, no mapping, or an
-  # already-matching priority all decide to no events.
+  # here to a CategoryPriority[] read model), resolves the priority for the event's
+  # category, and issues TryAssignPriority carrying that priority. Decide sees
+  # state + command only (DECIDER GWT RULE in the header).
+  # Gear-side guards (not decide, so not GWTs here): no mapping for the category =>
+  # the gear does not fire. An uncategorised incident cannot reach the gear because
+  # the trigger is IncidentCategorised.
+  # Code today (TryAssignPriorityHandler.LoadAsync + Handle(cmd, details, customer))
+  # does the lookup inside the handler; it moves to the gear when the Api is rewired
+  # onto the Decider. Event wire shape is unchanged.
   ✍️ Auto-Assign Priority:
     steps:
       - e: Incident / IncidentCategorised
@@ -220,6 +233,7 @@ slices:
       - c: TryAssignPriority
         props:
           incidentId: Guid
+          priority: IncidentPriority (Critical|High|Medium|Low)   # resolved by the gear: category -> Customer priorities
           userId: Guid              # the acting system/user identity stamped on the event
       - e: Incident / IncidentPrioritised
         props:
@@ -234,27 +248,12 @@ slices:
               incidentId: incident1Id
               status: Pending
               category: Database
-          - v: Customer priorities
-            props: { customerId: customer1Id, priorities: [customer1Priorities] }   # Database -> Critical
         when:
           - c: TryAssignPriority
-            props: { incidentId: incident1Id, userId: systemId }
+            props: { incidentId: incident1Id, priority: Critical, userId: systemId }
         then:
           - e: Incident / IncidentPrioritised
             props: { priority: Critical, userId: systemId }
-      no mapping for the category is a no-op:
-        given:
-          - v: State / Incident
-            props:
-              incidentId: incident1Id
-              status: Pending
-              category: Network     # customer1 has no Network mapping
-          - v: Customer priorities
-            props: { customerId: customer1Id, priorities: [customer1Priorities] }
-        when:
-          - c: TryAssignPriority
-            props: { incidentId: incident1Id, userId: systemId }
-        then: []
       already-matching priority is a no-op:
         given:
           - v: State / Incident
@@ -262,24 +261,10 @@ slices:
               incidentId: incident1Id
               status: Pending
               category: Database
-              priority: Critical    # already what the mapping says
-          - v: Customer priorities
-            props: { customerId: customer1Id, priorities: [customer1Priorities] }
+              priority: Critical    # already what the gear resolved
         when:
           - c: TryAssignPriority
-            props: { incidentId: incident1Id, userId: systemId }
-        then: []
-      uncategorised incident is a no-op:
-        given:
-          - v: State / Incident
-            props:
-              incidentId: incident1Id
-              status: Pending       # category still null
-          - v: Customer priorities
-            props: { customerId: customer1Id, priorities: [customer1Priorities] }
-        when:
-          - c: TryAssignPriority
-            props: { incidentId: incident1Id, userId: systemId }
+            props: { incidentId: incident1Id, priority: Critical, userId: systemId }
         then: []
 
   👀 View Updated Incident:

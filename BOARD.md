@@ -18,6 +18,7 @@ kanban-plugin: board
 
 ## Done
 
+- [x] state, ie emlang view, always as given in GWT, as per the decider pattern and kvissig.se
 - [x] Decider-true creation: Incident.Initial + Decide(state, cmd) receives initialState (Log New Incident)
 - [x] Reverse-engineer emlang spec from the Incident domain (specs/helpdesk.em.yaml, lint green)
 - [x] net11 preview + C# 15 native `union` types in the Incident domain
