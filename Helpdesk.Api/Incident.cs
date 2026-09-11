@@ -1,53 +1,13 @@
 using JasperFx.Events;
+using Marten.Events.Aggregation;
+using JasperFx;
 using Marten.Schema;
 
 namespace Helpdesk.Api;
 
-public record IncidentLogged(
-    Guid CustomerId,
-    Contact Contact,
-    string Description,
-    Guid LoggedBy
-);
-
-// Some hacking here that will hopefully be eliminated by Monday. Gulp.
-public class IncidentCategorised
-{
-    public IncidentCategory Category { get; set; }
-    public Guid UserId { get; set; }
-}
-
-public record IncidentPrioritised(IncidentPriority Priority, Guid UserId);
-
-public record AgentAssignedToIncident(Guid AgentId);
-
-public record AgentRespondedToIncident(        
-    Guid AgentId,
-    string Content,
-    bool VisibleToCustomer);
-
-public record CustomerRespondedToIncident(
-    Guid UserId,
-    string Content
-);
-
-public record IncidentResolved(
-    ResolutionType Resolution,
-    Guid ResolvedBy,
-    DateTimeOffset ResolvedAt
-);
-
-public record ResolutionAcknowledgedByCustomer(
-    Guid IncidentId,
-    Guid AcknowledgedBy,
-    DateTimeOffset AcknowledgedAt
-);
-
-public record IncidentClosed(
-    Guid IncidentId,
-    Guid ClosedBy,
-    DateTimeOffset ClosedAt
-);
+// RESIDUE. Everything in this file is something the spec deliberately does not state:
+// the value vocabulary its prop annotations name, the fold target, the shell context,
+// and the Result shape the generated Decider signature demands.
 
 public enum IncidentStatus
 {
@@ -59,82 +19,15 @@ public enum IncidentStatus
     Closed = 32
 }
 
-// C# 15 native closed union over the incident lifecycle events,
-// giving Apply() compiler-checked exhaustive pattern matching
-public union IncidentEvent(
-    IncidentLogged,
-    AgentRespondedToIncident,
-    CustomerRespondedToIncident,
-    IncidentResolved,
-    ResolutionAcknowledgedByCustomer,
-    IncidentClosed);
+public enum IncidentCategory { Software, Hardware, Network, Database }
 
-public record Incident(
-    Guid Id,
-    IncidentStatus Status,
-    bool HasOutstandingResponseToCustomer = false
-)
-{
-    public static Incident Initial => new(Guid.Empty, IncidentStatus.NotLogged);
+public enum IncidentPriority { Critical, High, Medium, Low }
 
-    // decide: (State, Command) -> Event — creation decide receives Initial
-    public static IncidentLogged Decide(Incident state, LogIncident command, Guid userId) =>
-        new(command.CustomerId, command.Contact, command.Description, userId);
+public enum ResolutionType { Temporary, Permanent, NotAnIncident }
 
-    // Marten still needs Create(IEvent<...>) to mint the Id from the stream
-    public static Incident Create(IEvent<IncidentLogged> logged) =>
-        Initial.Apply(logged.Data) with { Id = logged.Id };
+public enum ContactChannel { Email, Phone, InPerson, GeneratedBySystem }
 
-    // Marten discovers aggregation methods by concrete event type,
-    // so these overloads funnel into the single exhaustive union switch
-    public Incident Apply(IncidentLogged e) => Apply((IncidentEvent)e);
-    public Incident Apply(AgentRespondedToIncident e) => Apply((IncidentEvent)e);
-    public Incident Apply(CustomerRespondedToIncident e) => Apply((IncidentEvent)e);
-    public Incident Apply(IncidentResolved e) => Apply((IncidentEvent)e);
-    public Incident Apply(ResolutionAcknowledgedByCustomer e) => Apply((IncidentEvent)e);
-    public Incident Apply(IncidentClosed e) => Apply((IncidentEvent)e);
-
-    public Incident Apply(IncidentEvent @event) => @event switch
-    {
-        IncidentLogged => this with { Status = IncidentStatus.Pending },
-        AgentRespondedToIncident => this with { HasOutstandingResponseToCustomer = false },
-        CustomerRespondedToIncident => this with { HasOutstandingResponseToCustomer = true },
-        IncidentResolved => this with { Status = IncidentStatus.Resolved },
-        ResolutionAcknowledgedByCustomer => this with { Status = IncidentStatus.ResolutionAcknowledgedByCustomer },
-        IncidentClosed => this with { Status = IncidentStatus.Closed }
-    };
-}
-
-public enum IncidentCategory
-{
-    Software,
-    Hardware,
-    Network,
-    Database
-}
-
-public enum IncidentPriority
-{
-    Critical,
-    High,
-    Medium,
-    Low
-}
-
-public enum ResolutionType
-{
-    Temporary,
-    Permanent,
-    NotAnIncident
-}
-
-public enum ContactChannel
-{
-    Email,
-    Phone,
-    InPerson,
-    GeneratedBySystem
-}
+public enum IncidentNoteType { FromAgent, FromCustomer }
 
 public record Contact(
     ContactChannel ContactChannel,
@@ -144,4 +37,61 @@ public record Contact(
     string? PhoneNumber = null
 );
 
+public record IncidentNote(IncidentNoteType Type, Guid From, string Content, bool VisibleToCustomer);
 
+// SPEC GAP: AgentAssignedToIncident folds into the state but no slice produces it,
+// so it is absent from the generated Events surface. Hand-written for wire compatibility.
+public record AgentAssignedToIncident(Guid AgentId);
+
+/// <summary>
+/// The decider's decision model — the spec's `👀 Decision Model` view, prop for prop.
+/// Also the Marten single-stream aggregate, so `state` and the read model are one document.
+/// </summary>
+public record IncidentState(
+    [property: Identity] Guid IncidentId,
+    Guid CustomerId,
+    IncidentStatus Status,
+    IncidentCategory? Category = null,
+    IncidentPriority? Priority = null,
+    Guid? AgentId = null,
+    IncidentNote[]? Notes = null,
+    bool HasOutstandingResponseToCustomer = false,
+    int Version = 0
+)
+{
+    public static IncidentState Initial => new(Guid.Empty, Guid.Empty, IncidentStatus.NotLogged);
+}
+
+/// <summary>The claim-sourced and clock-sourced facts the spec says reach decide from the shell.</summary>
+public record IncidentContext(Guid UserId, DateTimeOffset Now);
+
+/// <summary>
+/// The generated Decider signature is `Result&lt;IncidentEvent[]&gt;`, so the consumer owns the shape.
+/// Business errors are values; there is no throwing path out of decide.
+/// </summary>
+public record Result<T>(T? Value, IncidentError? Error) where T : class
+{
+    public static implicit operator Result<T>(T value) => new(value, null);
+}
+
+/// <summary>
+/// Marten discovers aggregation methods by CONCRETE event type, and a union is not one,
+/// so these overloads funnel into the single generated Evolve switch. One line per e: in
+/// the spec — the price of the union, not of the interpreter.
+/// </summary>
+public class IncidentStateProjection : SingleStreamProjection<IncidentState, Guid>
+{
+    public static IncidentState Create(IEvent<IncidentLogged> e) =>
+        Decider.Evolve(IncidentState.Initial, e.Data) with { IncidentId = e.StreamId };
+
+    public IncidentState Apply(IncidentCategorised e, IncidentState s) => Decider.Evolve(s, e);
+    public IncidentState Apply(IncidentPrioritised e, IncidentState s) => Decider.Evolve(s, e);
+    public IncidentState Apply(AgentRespondedToIncident e, IncidentState s) => Decider.Evolve(s, e);
+    public IncidentState Apply(CustomerRespondedToIncident e, IncidentState s) => Decider.Evolve(s, e);
+    public IncidentState Apply(IncidentResolved e, IncidentState s) => Decider.Evolve(s, e);
+    public IncidentState Apply(ResolutionAcknowledgedByCustomer e, IncidentState s) => Decider.Evolve(s, e);
+    public IncidentState Apply(IncidentClosed e, IncidentState s) => Decider.Evolve(s, e);
+
+    // SPEC GAP, see AgentAssignedToIncident above.
+    public IncidentState Apply(AgentAssignedToIncident e, IncidentState s) => s with { AgentId = e.AgentId };
+}

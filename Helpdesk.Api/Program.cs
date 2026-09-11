@@ -1,16 +1,14 @@
 using Helpdesk.Api;
+using JasperFx;
 using JasperFx.CodeGeneration;
 using JasperFx.Core;
 using JasperFx.Events.Projections;
 using Marten;
 using Marten.Exceptions;
 using Npgsql;
-using JasperFx;
 using Wolverine;
 using Wolverine.ErrorHandling;
-using Wolverine.FluentValidation;
 using Wolverine.Http;
-using Wolverine.Http.FluentValidation;
 using Wolverine.Marten;
 using Wolverine.RabbitMQ;
 
@@ -24,8 +22,8 @@ builder.Services.AddMarten(opts =>
     var connectionString = builder.Configuration.GetConnectionString("marten")
         ?? throw new InvalidOperationException("Connection string 'marten' is not configured.");
     opts.Connection(connectionString);
-    
-    opts.Projections.Add<IncidentDetailsProjection>(ProjectionLifecycle.Inline);
+
+    opts.Projections.Add<IncidentStateProjection>(ProjectionLifecycle.Inline);
 
     // This will create a btree index within the JSONB data
     opts.Schema.For<Customer>().Index(x => x.Region!);
@@ -36,62 +34,34 @@ builder.Services.AddMarten(opts =>
     {
         integration.UseFastEventForwarding = true;
 
-        // Setting up a little transformation of an event with event metadata to an internal command message
-        integration.SubscribeToEvent<IncidentCategorised>().TransformedTo(e => new TryAssignPriority
-        {
-            IncidentId = e.StreamId,
-            UserId = e.Data.UserId
-        });
+        // The spec's PROCESSOR slices (e: -> ⚙️ -> c:) become event forwarding rules.
+        SpecInterpreter.ForwardEvents(integration);
     });
 
 builder.Host.UseWolverine(opts =>
 {
     opts.CodeGeneration.TypeLoadMode = TypeLoadMode.Dynamic;
-    
+
     // Let's build in some durability for transient errors
     opts.OnException<NpgsqlException>().Or<MartenCommandException>()
         .RetryWithCooldown(50.Milliseconds(), 100.Milliseconds(), 250.Milliseconds());
-    
-    // Apply the validation middleware *and* discover and register
-    // Fluent Validation validators
-    opts.UseFluentValidation();
-    
-    // Automatic transactional middleware
+
     opts.Policies.AutoApplyTransactions();
-    
-    // Opt into the transactional inbox for local 
-    // queues
     opts.Policies.UseDurableLocalQueues();
-    
-    // Opt into the transactional inbox/outbox on all messaging
-    // endpoints
     opts.Policies.UseDurableOutboxOnAllSendingEndpoints();
-    
-    // Connecting to a local Rabbit MQ broker
-    // at the default port
+
     opts.UseRabbitMq();
 
-    // Adding a single Rabbit MQ messaging rule
-    opts.PublishMessage<RingAllTheAlarms>()
-        .ToRabbitExchange("notifications");
+    // VOCABULARY PRESSURE: emlang has no outgoing-message element, so this rule is hand-written.
+    opts.PublishMessage<RingAllTheAlarms>().ToRabbitExchange("notifications");
 
-    opts.LocalQueueFor<TryAssignPriority>()
-        // By default, local queues allow for parallel processing with a maximum
-        // parallel count equal to the number of processors on the executing
-        // machine, but you can override the queue to be sequential and single file
-        .Sequential()
+    // The spec's processor commands become message handlers built from a closed generic shell.
+    SpecInterpreter.RegisterHandlers(opts);
 
-        // Or add more to the maximum parallel count!
-        .MaximumParallelMessages(10);
-    
-    // Or if so desired, you can route specific messages to 
-    // specific local queues when ordering is important
     opts.Policies.DisableConventionalLocalRouting();
     opts.Publish(x =>
     {
-        x.Message<TryAssignPriority>();
-        x.Message<CategoriseIncident>();
-
+        foreach (var plan in SpecRegistry.Plans.Where(p => p.IsProcessor)) x.Message(plan.CommandType);
         x.ToLocalQueue("commands").Sequential();
     });
 });
@@ -99,12 +69,10 @@ builder.Host.UseWolverine(opts =>
 builder.Services.AddWolverineHttp();
 builder.Services.AddAuthentication("Test");
 builder.Services.AddAuthorization();
-builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -115,16 +83,13 @@ app.UseAuthorization();
 
 app.MapWolverineEndpoints(opts =>
 {
-    // Direct Wolverine.HTTP to use Fluent Validation
-    // middleware to validate any request bodies where
-    // there's a known validator (or many validators)
-    opts.UseFluentValidationProblemDetailMiddleware();
-    
-    // Creates a User object in HTTP requests based on
-    // the "user-id" claim
+    // Creates a User object in HTTP requests based on the "user-id" claim
     opts.AddMiddleware(typeof(UserDetectionMiddleware));
+
+    // Every HTTP endpoint in this application is registered from the spec.
+    SpecInterpreter.MapSpec(opts);
 });
 
-// This is important for Wolverine/Marten diagnostics 
+// This is important for Wolverine/Marten diagnostics
 // and environment management
 return await app.RunJasperFxCommands(args);

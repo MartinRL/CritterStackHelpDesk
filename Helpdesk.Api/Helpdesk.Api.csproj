@@ -11,9 +11,18 @@
     <PackageReference Include="Marten.AspNetCore" Version="9.31.2" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
     <PackageReference Include="WolverineFx.Marten" Version="6.33.0" />
-    <PackageReference Include="WolverineFx.Http.FluentValidation" Version="6.33.0" />
+    <PackageReference Include="WolverineFx.Http" Version="6.33.0" />
     <PackageReference Include="WolverineFx.RabbitMQ" Version="6.33.0" />
     <PackageReference Include="WolverineFx.RuntimeCompilation" Version="6.33.0" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+    <PackageReference Include="Emlang.Generators" Version="0.3.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- The spec is both a compile-time input (the generated command/event/error surface)
+       and a runtime input (spec-driven registration). -->
+  <ItemGroup>
+    <AdditionalFiles Include="..\specs\helpdesk.em.yaml" EmlangPrefix="Incident" />
+    <Content Include="..\specs\helpdesk.em.yaml" Link="helpdesk.em.yaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
