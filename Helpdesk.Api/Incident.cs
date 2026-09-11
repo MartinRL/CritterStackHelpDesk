@@ -71,6 +71,10 @@ public record IncidentContext(Guid UserId, DateTimeOffset Now);
 /// </summary>
 public record Result<T>(T? Value, IncidentError? Error) where T : class
 {
+    // A C# 15 union is a struct, so IncidentError? is Nullable<IncidentError> and `.Value`
+    // means two different things one after the other. Named once, here.
+    public string? ErrorName => Error?.Value?.GetType().Name;
+
     public static implicit operator Result<T>(T value) => new(value, null);
 }
 

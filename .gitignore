@@ -406,3 +406,4 @@ specs/*.em.html
 
 # local folder feed for the unreleased Emlang.Generators 0.3.0
 local-nuget/
+.claude/

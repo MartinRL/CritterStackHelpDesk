@@ -109,9 +109,8 @@ public static class SpecShell
         }
 
         var result = Decider.Decide(state, plan.ToUnion(command), new IncidentContext(userId, DateTimeOffset.UtcNow));
-        // A union's `is { }` pattern narrows to object, so the case type comes off .Value directly.
-        if (result.Error is not null)
-            return Problem(422, result.Error.Value!.GetType().Name, plan.Slice);
+        if (result.ErrorName is { } error)
+            return Problem(422, error, plan.Slice);
 
         var events = result.Value!;
         if (events.Length > 0)

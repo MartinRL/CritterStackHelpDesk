@@ -13,14 +13,11 @@ await using var session = store.LightweightSession();
 var contact = new Contact(ContactChannel.Email, "Han", "Solo");
 var userId = Guid.NewGuid();
 
-var incidentId = session.Events.StartStream<Incident>(
-    new IncidentLogged(Guid.NewGuid(), contact, "Software is crashing",userId),
-    new IncidentCategorised
-    {
-        Category = IncidentCategory.Database,
-        UserId = userId
-    }
-    
+var newIncidentId = Guid.NewGuid();
+var incidentId = session.Events.StartStream<IncidentState>(
+    newIncidentId,
+    new IncidentLogged(newIncidentId, Guid.NewGuid(), contact, "Software is crashing", userId),
+    new IncidentCategorised(IncidentCategory.Database, userId)
 ).Id;
 
 await session.SaveChangesAsync();
@@ -54,7 +51,7 @@ AnsiConsole.MarkupLine("[green]The current state of the new incident:[/]");
 
 // Skipping ahead here, but let's load the current state of the Incident
 // by using a Marten "Live" aggregation
-var incident = await session.Events.AggregateStreamAsync<Incident>(incidentId);
+var incident = await session.Events.AggregateStreamAsync<IncidentState>(incidentId);
 
 
 Console.WriteLine(JsonConvert.SerializeObject(incident, settings));
