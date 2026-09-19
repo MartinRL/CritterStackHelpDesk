@@ -14,8 +14,8 @@
     <PackageReference Include="WolverineFx.Http" Version="6.33.0" />
     <PackageReference Include="WolverineFx.RabbitMQ" Version="6.33.0" />
     <PackageReference Include="WolverineFx.RuntimeCompilation" Version="6.33.0" />
-    <PackageReference Include="YamlDotNet" Version="16.3.0" />
     <PackageReference Include="Emlang.Generators" Version="0.3.0" PrivateAssets="all" />
+    <PackageReference Include="Emlang" Version="0.5.0" />
   </ItemGroup>
 
   <!-- The spec is both a compile-time input (the generated command/event/error surface)

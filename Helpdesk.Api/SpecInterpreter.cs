@@ -64,17 +64,17 @@ public static class SpecInterpreter
     /// </summary>
     public static void ForwardEvents(object integration)
     {
-        foreach (var slice in SpecRegistry.Slices)
+        foreach (var chain in SpecRegistry.Spec.Chains)
         {
-            if (!slice.IsAutomation) continue;
-            var trigger = slice.Steps.TakeWhile(s => s.Kind != "auto").LastOrDefault(s => s.Kind == "e");
-            if (trigger is null || slice.Command is null || !slice.HasEventAfterCommand) continue;
+            if (!SpecRegistry.IsAutomation(chain) || !SpecRegistry.WritesStream(chain)) continue;
+            var trigger = chain.Steps.TakeWhile(e => e.Kind != 'c').LastOrDefault(e => e.Kind == 'e');
+            if (trigger is null) continue;
 
-            var eventName = trigger.Value.Split('/')[^1].Trim();
+            var eventName = trigger.Name;
             var eventType = typeof(Decider).Assembly.GetType(typeof(Decider).Namespace + "." + eventName)
                 ?? throw new InvalidOperationException(
-                    "spec slice '" + slice.Name + "': trigger event '" + eventName + "' has no CLR type.");
-            var plan = SpecRegistry.Plans.Single(p => p.Command == slice.Command);
+                    "spec slice '" + chain.Slice + "': trigger event '" + eventName + "' has no CLR type.");
+            var plan = SpecRegistry.Plans.Single(p => p.Command == chain.Commands.First().Name);
 
             var transform = Transformer(eventType, plan.CommandType);
             var subscription = integration.GetType().GetMethod("SubscribeToEvent", Type.EmptyTypes)!

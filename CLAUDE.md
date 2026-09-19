@@ -24,6 +24,20 @@ dotnet test
 dotnet test --filter "FullyQualifiedName~TestClassName.TestMethodName"
 ```
 
+## Spec tooling
+
+`specs/helpdesk.em.yaml` is written in the emlang decider dialect (github.com/MartinRL/xmlang,
+`emlang-dialect.md`). Lint it with the `Emlang.Cli` global tool: `em lint specs/helpdesk.em.yaml`
+(reads `.emlang.yaml` at the repo root).
+
+Unreleased xmlang-repo packs (Emlang 0.5.0, Xmlang 0.6.1 and their CLIs) live in `local-nuget/`,
+a tracked folder feed listed first in `NuGet.config` — the same setup as kvissig.se. Install the
+tools from it with `dotnet tool update -g Emlang.Cli` / `Xmlang.Cli`. Delete `local-nuget/` and
+its source line once the packs are on nuget.org.
+
+`Helpdesk.Api` reads the spec at boot through `Emlang.EmParser` (`Spec.cs`); `Emlang.Generators`
+0.3.0 from nuget.org still generates the command/event/error records at compile time.
+
 ## Architecture Overview
 
 This is a **Critter Stack** demo implementing CQRS with Event Sourcing using:
