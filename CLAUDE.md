@@ -2,7 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Build & Ru#n Commands
+## Working mode
+
+Ponytail mode (level: full) is mandatory in this repo. The `ponytail@ponytail` plugin is enabled in
+`.claude/settings.json` and activates on SessionStart. If no `PONYTAIL MODE ACTIVE` hook output appeared
+this session, invoke the `ponytail:ponytail` skill (`/ponytail full`) before doing any work.
+
+## Build & Run Commands
 
 ```bash
 # Start infrastructure (PostgreSQL on 5433, RabbitMQ, Kafka)

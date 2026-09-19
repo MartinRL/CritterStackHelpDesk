@@ -404,4 +404,4 @@ FodyWeavers.xsd
 # emlang diagram artifacts (generated)
 specs/*.em.html
 
-.claude/
+.claude/settings.local.json

@@ -13,11 +13,11 @@ kanban-plugin: board
 - [ ] state, ie emlang view, always as given in GWT, as per the decider pattern and kvissig.seadde
 - [ ] upgrade xmlang pkg and fix breaking changes
 - [ ] Diagram for dialect 1.1 specs (Go `emlang diagram` rejects a:/auto:/s:; em has no diagram yet)
-- [ ] ACMM Ponytail
 - [ ] ACMM Code Health
 
 
 ## Doing
+- [ ] ACMM Ponytail
 
 
 ## Done
