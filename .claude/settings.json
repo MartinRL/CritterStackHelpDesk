@@ -6,5 +6,18 @@
   },
   "enabledPlugins": {
     "ponytail@ponytail": true
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/codehealth.sh\" --changed",
+            "statusMessage": "Checking code health (CH >= 9.4)"
+          }
+        ]
+      }
+    ]
   }
 }

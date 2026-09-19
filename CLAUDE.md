@@ -44,6 +44,23 @@ its source line once the packs are on nuget.org.
 `Helpdesk.Api` reads the spec at boot through `Emlang.EmParser` (`Spec.cs`); `Emlang.Generators`
 0.3.0 from nuget.org still generates the command/event/error records at compile time.
 
+## Code health gate
+
+CodeScene Code Health must stay at or above 9.4 for every production C# file (`Helpdesk.Api`,
+`NotificationService`; tests, the demo console and generated code are out of scope). The same
+script enforces it everywhere, lifted from kvissig.se:
+
+- `.claude/hooks/codehealth.sh --changed` runs as a Stop hook (`.claude/settings.json`) on the
+  files touched this turn and blocks the stop with the failing files. Fix the code, never lower
+  the threshold; a grandfathered file goes in the script's `EXEMPT_RE` with its CH and reason.
+- `.github/workflows/ci.yml` runs `--all` on pull requests and pushes to main (secret
+  `CS_ACCESS_TOKEN`). `--report` prints the per-file baseline without failing.
+- `.codescene/code-health-rules.json` tunes smells per path (the shell takes DI dependencies as
+  arguments, so its argument cap is 7 and Primitive Obsession is off). `cs review` reads it.
+
+Requires the `cs` CLI (`curl -sL https://downloads.codescene.io/enterprise/cli/install-codescene-cli.sh | sh`)
+and `CS_ACCESS_TOKEN` in the environment; the hook sources `~/.bashrc` to find it.
+
 ## Architecture Overview
 
 This is a **Critter Stack** demo implementing CQRS with Event Sourcing using:

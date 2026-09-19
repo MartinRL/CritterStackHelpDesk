@@ -1,0 +1,19 @@
+{
+  "rule_sets": [
+    {
+      "matching_content_path": "**/SpecShell.cs",
+      "thresholds": [
+        {
+          "name": "function_max_arguments",
+          "value": 7
+        }
+      ],
+      "rules": [
+        {
+          "name": "Primitive Obsession",
+          "weight": 0.0
+        }
+      ]
+    }
+  ]
+}

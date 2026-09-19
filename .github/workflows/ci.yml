@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # .NET 11 preview SDK (pinned in global.json). Integration tests need Postgres, so CI
+      # only builds; `dotnet test` stays a local step with docker compose up.
+      - name: Setup .NET 11 preview
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+          dotnet-quality: preview
+
+      - name: Build
+        run: dotnet build -c Release
+
+  code-health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install cs (CodeScene devtools CLI)
+        # The installer drops cs into ~/.local/bin, then dies (exit 2) on an interactive
+        # /dev/tty PATH prompt. Swallow that and put the dir on PATH ourselves.
+        run: |
+          curl -sL https://downloads.codescene.io/enterprise/cli/install-codescene-cli.sh | sh || true
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: CodeHealth gate (CH >= 9.4)
+        env:
+          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+        run: bash .claude/hooks/codehealth.sh --all
