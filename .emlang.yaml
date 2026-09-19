@@ -6,3 +6,12 @@ lint:
     # Critical Priority Alert ends at RingAllTheAlarms: an OUTGOING MESSAGE to
     # NotificationService, not a stream command — emlang has no message element.
     - command-without-event
+    # LEGACY WIRE SHAPE: events are the existing Marten records (spec header: WIRE
+    # COMPATIBILITY). The actor is the claim-sourced userId/loggedBy, not a <role>Id, and
+    # the stream id is Marten single-stream metadata, not an event prop, so the DCB tag
+    # rule does not apply. Revisit when the domain is rewired onto the Decider.
+    - em-actor-identity
+    - em-fold-untagged-event
+    # Customer priorities is reference data (the Customer document) with no event source
+    # to project from; Incident details.agentId has no producing slice yet.
+    - em-view-prop-untraced

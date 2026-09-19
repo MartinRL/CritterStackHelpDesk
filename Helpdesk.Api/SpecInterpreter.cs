@@ -59,15 +59,15 @@ public static class SpecInterpreter
     }
 
     /// <summary>
-    /// The processor's trigger: e: -> ⚙️ -> c: becomes SubscribeToEvent&lt;TEvent&gt;().TransformedTo(...).
+    /// The processor's trigger: e: -> auto: ⚙️ -> c: becomes SubscribeToEvent&lt;TEvent&gt;().TransformedTo(...).
     /// Both APIs are generic with no non-generic escape hatch, so two generic hops and a shim.
     /// </summary>
     public static void ForwardEvents(object integration)
     {
         foreach (var slice in SpecRegistry.Slices)
         {
-            if (slice.Trigger?.StartsWith('⚙') != true) continue;
-            var trigger = slice.Steps.TakeWhile(s => s.Kind != 't').LastOrDefault(s => s.Kind == 'e');
+            if (!slice.IsAutomation) continue;
+            var trigger = slice.Steps.TakeWhile(s => s.Kind != "auto").LastOrDefault(s => s.Kind == "e");
             if (trigger is null || slice.Command is null || !slice.HasEventAfterCommand) continue;
 
             var eventName = trigger.Value.Split('/')[^1].Trim();

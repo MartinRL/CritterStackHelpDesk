@@ -3,26 +3,28 @@
 # maps to 1:1. Syntax per emlang YAML (Emlang.Cli); conventions borrowed from
 # kvissig.se/specs/CLAUDE.md.
 #
-# Conventions:
-#   triggers carry the actor role + originating screen
-#                                  (🧑 Customer / Incident form, 🧑‍💼 Agent / Incident details,
-#                                   ⚙️ System / ...)
+# Conventions (emlang decider dialect 1.1.0, em 0.4.0):
+#   initiators carry the role + originating screen
+#     a:    actor        (🧑 Customer / Incident form, 🧑‍💼 Agent / Incident details)
+#     auto: automation   (⚙️ System / ...) — the Event-Modeling PROCESSOR gear
 #   commands are bare              (LogIncident, CategoriseIncident)
 #   events carry the stream        (Incident / IncidentLogged)
 #   exceptions are bare            (UnknownCustomer)
-#   screen views are bare data nouns; the decider's decision model carries the
-#   State / lane                   (State / Incident)
+#   screen views are bare data nouns (v: Incident details); the decider's decision
+#   model is the state element     (s: Incident)
 #
 # DECIDER GWT RULE: decide(state, command) -> events. Every ✍️ test gives exactly ONE
-# view, State / Incident, and nothing else. Reference data (Customer directory,
+# state, s: Incident, and nothing else. Reference data (Customer directory,
 # Customer priorities) is resolved by the shell / the gear and reaches decide as
-# command props, never as a second given. Evolve is tested in 👀 Decision Model
-# (given events, then State / Incident). NOTE: the diagram renders State / Incident
-# as a bare "Incident" card (renderer drops the lane label); green = view, orange = event.
+# command props, never as a second given. The creation given is the EMPTY state
+# (s: Incident with no props = the query matched no events); the code side folds it
+# as Incident.Initial / status NotLogged. Evolve is tested by the fold tests in
+# 👀 Decision Model (given events, then s: Incident); every event a decision emits
+# must be folded by one of them (em-then-outside-query).
 #
 # Slice-name emoji: ✍️ state-change (writes the stream), 👀 state view (screens +
 # decider State). Automations are the Event-Modeling PROCESSOR pattern:
-#   event(s) -> read-model -> ⚙️ System trigger (the gear) -> command -> event(s)
+#   event(s) -> read-model -> auto: ⚙️ System (the gear) -> command -> event(s)
 #
 # WIRE COMPATIBILITY: event names and props are EXACTLY the records in
 # Helpdesk.Api/Incident.cs — British spelling included (IncidentCategorised,
@@ -67,7 +69,7 @@ slices:
   # Tests trace to LogIncident_handling.cs.
   ✍️ Log New Incident:
     steps:
-      - t: 🧑 Customer / Incident form
+      - a: 🧑 Customer / Incident form
       - c: LogIncident
         props:
           customerId: Guid
@@ -86,14 +88,13 @@ slices:
           loggedBy: Guid            # from the user-id claim
       - v: Incident details
     tests:
-      # Creation given = Incident.Initial (the empty stream folded): status NotLogged,
-      # the empty-stream sentinel — drawn so the diagram shows state flowing into decide.
-      # The Customer lookup is a shell dependency ([WolverineBefore] middleware,
-      # BaselineData seed) — reference data, never drawn as a given.
+      # Creation given = the empty state (no props): the stream has no events yet. The
+      # code side folds it as Incident.Initial (status NotLogged). The Customer lookup is
+      # a shell dependency ([WolverineBefore] middleware, BaselineData seed) — reference
+      # data, never drawn as a given.
       incident can be logged:
         given:
-          - v: State / Incident
-            props: { status: NotLogged }
+          - s: Incident
         when:
           - c: LogIncident
             props: { customerId: customer1Id, contact: emailContact, description: It's broken }
@@ -107,8 +108,7 @@ slices:
               loggedBy: martinId
       cannot log incident for unknown customer:
         given:
-          - v: State / Incident
-            props: { status: NotLogged }
+          - s: Incident
         when:
           - c: LogIncident
             props: { customerId: unknown, contact: emailContact, description: It's broken }
@@ -116,8 +116,7 @@ slices:
           - x: UnknownCustomer
       cannot log incident without description:
         given:
-          - v: State / Incident
-            props: { status: NotLogged }
+          - s: Incident
         when:
           - c: LogIncident
             props: { customerId: customer1Id, contact: emailContact, description: "" }
@@ -159,7 +158,7 @@ slices:
   # Tests trace to CategoriseIncidentTests.cs + categorise_incidents_end_to_end.cs.
   ✍️ Categorise Incident:
     steps:
-      - t: 🧑‍💼 Agent / Incident details
+      - a: 🧑‍💼 Agent / Incident details
       - c: CategoriseIncident
         props:
           incidentId: Guid          # wire name "Id" in the existing API
@@ -175,7 +174,7 @@ slices:
     tests:
       changed category is recorded:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Pending
@@ -189,7 +188,7 @@ slices:
       unchanged category is a no-op:
         # decide returns no events when existing.Category == command.Category
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Pending
@@ -200,7 +199,7 @@ slices:
         then: []
       cannot categorise with version zero:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Pending
@@ -229,7 +228,7 @@ slices:
         props:
           customerId: Guid
           priorities: CategoryPriority[]   # { category: IncidentCategory, priority: IncidentPriority } — normalized from Customer.Priorities
-      - t: ⚙️ System / Assign priority
+      - auto: ⚙️ System / Assign priority
       - c: TryAssignPriority
         props:
           incidentId: Guid
@@ -243,7 +242,7 @@ slices:
     tests:
       customer mapping assigns the priority:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Pending
@@ -256,7 +255,7 @@ slices:
             props: { priority: Critical, userId: systemId }
       already-matching priority is a no-op:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Pending
@@ -299,7 +298,7 @@ slices:
   ✍️ Critical Priority Alert:
     steps:
       - e: Incident / IncidentPrioritised
-      - t: ⚙️ System / Alert dispatcher
+      - auto: ⚙️ System / Alert dispatcher
       - c: RingAllTheAlarms
         props:
           incidentId: Guid
@@ -313,7 +312,7 @@ slices:
   # accepts no further conversation).
   ✍️ Agent Responds:
     steps:
-      - t: 🧑‍💼 Agent / Incident details
+      - a: 🧑‍💼 Agent / Incident details
       - c: RecordAgentResponse
         props:
           incidentId: Guid
@@ -329,7 +328,7 @@ slices:
     tests:
       agent response is recorded:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Pending
@@ -341,7 +340,7 @@ slices:
             props: { agentId: agentId, content: try rebooting, visibleToCustomer: true }
       cannot respond to a closed incident:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Closed
@@ -354,7 +353,7 @@ slices:
   # ASSUMPTION: inferred command; no endpoint exists. userId from the user-id claim.
   ✍️ Customer Responds:
     steps:
-      - t: 🧑 Customer / Incident details
+      - a: 🧑 Customer / Incident details
       - c: RecordCustomerResponse
         props:
           incidentId: Guid
@@ -368,7 +367,7 @@ slices:
     tests:
       customer response is recorded:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Pending
@@ -380,7 +379,7 @@ slices:
             props: { userId: martinId, content: still broken }
       cannot respond to a closed incident:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Closed
@@ -396,7 +395,7 @@ slices:
   # claim; resolvedAt stamped by the shell.
   ✍️ Resolve Incident:
     steps:
-      - t: 🧑‍💼 Agent / Incident details
+      - a: 🧑‍💼 Agent / Incident details
       - c: ResolveIncident
         props:
           incidentId: Guid
@@ -411,7 +410,7 @@ slices:
     tests:
       incident can be resolved:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Pending
@@ -423,7 +422,7 @@ slices:
             props: { resolution: Permanent, resolvedBy: agentId, resolvedAt: resolvedAt }
       cannot resolve a closed incident:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Closed
@@ -438,7 +437,7 @@ slices:
   # acknowledged (IncidentStatus lifecycle order).
   ✍️ Acknowledge Resolution:
     steps:
-      - t: 🧑 Customer / Incident details
+      - a: 🧑 Customer / Incident details
       - c: AcknowledgeResolution
         props:
           incidentId: Guid
@@ -452,7 +451,7 @@ slices:
     tests:
       resolution can be acknowledged:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Resolved
@@ -464,7 +463,7 @@ slices:
             props: { incidentId: incident1Id, acknowledgedBy: martinId, acknowledgedAt: acknowledgedAt }
       cannot acknowledge an unresolved incident:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Pending
@@ -479,7 +478,7 @@ slices:
   # acknowledgement first (IncidentStatus lifecycle order).
   ✍️ Close Incident:
     steps:
-      - t: 🧑‍💼 Agent / Incident details
+      - a: 🧑‍💼 Agent / Incident details
       - c: CloseIncident
         props:
           incidentId: Guid
@@ -494,7 +493,7 @@ slices:
     tests:
       acknowledged incident can be closed:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: ResolutionAcknowledgedByCustomer
@@ -506,7 +505,7 @@ slices:
             props: { incidentId: incident1Id, closedBy: agentId, closedAt: closedAt }
       cannot close before the customer acknowledges:
         given:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Resolved
@@ -522,14 +521,15 @@ slices:
   # every command slice above. Mirrors the Incident aggregate (Incident.cs) widened
   # with the IncidentDetails props decide needs (category/priority for triage guards).
   # Fold tests are mined from IncidentAggregateTests.cs.
-  # Decide always receives state; creation givens draw Incident.Initial (the empty
-  # stream folded): status NotLogged, the empty-stream sentinel.
+  # Decide always receives state; creation givens are the empty state (the code side's
+  # Incident.Initial, status NotLogged). One fold test per emitted event type keeps the
+  # model closed (em-then-outside-query).
   # NOTE: AgentAssignedToIncident { agentId: Guid } exists in Incident.cs and folds
   # into IncidentDetails.AgentId, but no slice produces it yet — carried here for
   # wire compatibility only.
   👀 Decision Model:
     steps:
-      - v: State / Incident
+      - s: Incident
         props:
           incidentId: Guid
           customerId: Guid
@@ -550,11 +550,26 @@ slices:
           - e: Incident / AgentRespondedToIncident
             props: { agentId: agentId, content: try rebooting, visibleToCustomer: true }
         then:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Pending
               hasOutstandingResponseToCustomer: false   # customer set it true, agent cleared it
+      triage folds category and priority:
+        given:
+          - e: Incident / IncidentLogged
+            props: { incidentId: incident1Id, customerId: customer1Id, contact: emailContact, description: It's broken, loggedBy: martinId }
+          - e: Incident / IncidentCategorised
+            props: { category: Database, userId: agentId }
+          - e: Incident / IncidentPrioritised
+            props: { priority: Critical, userId: systemId }
+        then:
+          - s: Incident
+            props:
+              incidentId: incident1Id
+              status: Pending
+              category: Database
+              priority: Critical
       lifecycle folds through resolved and acknowledged to closed:
         given:
           - e: Incident / IncidentLogged
@@ -566,7 +581,7 @@ slices:
           - e: Incident / IncidentClosed
             props: { incidentId: incident1Id, closedBy: agentId, closedAt: closedAt }
         then:
-          - v: State / Incident
+          - s: Incident
             props:
               incidentId: incident1Id
               status: Closed

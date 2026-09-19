@@ -7,15 +7,17 @@ namespace Helpdesk.Api;
 
 // ponytail: private slice pass, move into Emlang as EmSlice when it stabilises.
 // Emlang.EmParser flattens slices (elements deduplicated file-wide, Slices is just names),
-// and per-slice step ORDER plus the first given status is exactly what the interpreter needs.
-public sealed record EmStep(char Kind, string Value);
+// and per-slice step ORDER plus the given state is exactly what the interpreter needs.
+// Kind is the dialect's short key: a / auto / c / x / e / v / s.
+public sealed record EmStep(string Kind, string Value);
 
-public sealed record EmSlice(string Name, IReadOnlyList<EmStep> Steps, string? FirstGivenStatus)
+public sealed record EmSlice(string Name, IReadOnlyList<EmStep> Steps, bool HasEmptyGivenState)
 {
-    public string? Trigger => Steps.FirstOrDefault(s => s.Kind == 't')?.Value;
-    public string? Command => Steps.FirstOrDefault(s => s.Kind == 'c')?.Value;
-    public bool HasEventAfterCommand => Steps.SkipWhile(s => s.Kind != 'c').Skip(1).Any(s => s.Kind == 'e');
-    public IEnumerable<string> Errors => Steps.Where(s => s.Kind == 'x').Select(s => s.Value);
+    /// <summary>An auto: initiator makes the slice a processor (the gear).</summary>
+    public bool IsAutomation => Steps.Any(s => s.Kind == "auto");
+    public string? Command => Steps.FirstOrDefault(s => s.Kind == "c")?.Value;
+    public bool HasEventAfterCommand => Steps.SkipWhile(s => s.Kind != "c").Skip(1).Any(s => s.Kind == "e");
+    public IEnumerable<string> Errors => Steps.Where(s => s.Kind == "x").Select(s => s.Value);
 }
 
 public static class EmSpec
@@ -32,7 +34,7 @@ public static class EmSpec
             return new EmSlice(
                 ((YamlScalarNode)entry.Key).Value!,
                 [.. Sequence(body, "steps").OfType<YamlMappingNode>().SelectMany(Kinds)],
-                FirstGivenStatus(body));
+                HasEmptyGivenState(body));
         })];
     }
 
@@ -41,23 +43,19 @@ public static class EmSpec
             ? seq.Children
             : [];
 
+    private static readonly HashSet<string> Keys = ["a", "auto", "c", "x", "e", "v", "s"];
+
     private static IEnumerable<EmStep> Kinds(YamlMappingNode step) =>
         step.Children
-            .Where(c => c.Key is YamlScalarNode { Value.Length: 1 } k && "tcxev".Contains(k.Value!))
-            .Select(c => new EmStep(((YamlScalarNode)c.Key).Value![0], ((YamlScalarNode)c.Value).Value ?? ""));
+            .Where(c => c.Key is YamlScalarNode k && Keys.Contains(k.Value!))
+            .Select(c => new EmStep(((YamlScalarNode)c.Key).Value!, ((YamlScalarNode)c.Value).Value ?? ""));
 
-    /// <summary>The creation-slice detector: the first given's State status (NotLogged = empty stream).</summary>
-    private static string? FirstGivenStatus(YamlMappingNode? body) =>
+    /// <summary>The creation-slice detector: a given state with no props is the dialect's empty state.</summary>
+    private static bool HasEmptyGivenState(YamlMappingNode? body) =>
         body is not null && body.Children.TryGetValue(new YamlScalarNode("tests"), out var tests) && tests is YamlMappingNode cases
-            ? cases.Children.Values.OfType<YamlMappingNode>()
+            && cases.Children.Values.OfType<YamlMappingNode>()
                 .SelectMany(t => Sequence(t, "given").OfType<YamlMappingNode>())
-                .Where(g => g.Children.ContainsKey(new YamlScalarNode("v")))
-                .Select(g => g.Children.TryGetValue(new YamlScalarNode("props"), out var p) && p is YamlMappingNode props
-                             && props.Children.TryGetValue(new YamlScalarNode("status"), out var s)
-                    ? ((YamlScalarNode)s).Value
-                    : null)
-                .FirstOrDefault(v => v is not null)
-            : null;
+                .Any(g => g.Children.ContainsKey(new YamlScalarNode("s")) && !g.Children.ContainsKey(new YamlScalarNode("props")));
 }
 
 /// <summary>Everything the interpreter decided about one command slice, computed once at boot.</summary>
@@ -93,7 +91,7 @@ public static class SpecRegistry
 
     /// <summary>The aggregate noun, read off the event lane ("Incident / IncidentLogged").</summary>
     public static string Noun { get; } =
-        Slices.SelectMany(s => s.Steps).First(s => s.Kind == 'e').Value.Split('/')[0].Trim();
+        Slices.SelectMany(s => s.Steps).First(s => s.Kind == "e").Value.Split('/')[0].Trim();
 
     public static string Prefix { get; } = "/" + Noun.ToLowerInvariant() + "s";
 
@@ -135,7 +133,7 @@ public static class SpecRegistry
 
     private static IReadOnlyList<SlicePlan> BuildPlans()
     {
-        var noun = Slices.SelectMany(s => s.Steps).First(s => s.Kind == 'e').Value.Split('/')[0].Trim();
+        var noun = Slices.SelectMany(s => s.Steps).First(s => s.Kind == "e").Value.Split('/')[0].Trim();
         var prefix = "/" + noun.ToLowerInvariant() + "s";
         var plans = new List<SlicePlan>();
         var routes = new Dictionary<string, string>();
@@ -155,8 +153,8 @@ public static class SpecRegistry
                 ?? throw new InvalidOperationException(
                     "spec slice '" + slice.Name + "': '" + name + "' is not a case of IncidentCommand, so Decider.Decide cannot reach it.");
 
-            var isProcessor = slice.Trigger?.StartsWith('⚙') == true;
-            var isCreation = slice.FirstGivenStatus == IncidentStatus.NotLogged.ToString();
+            var isProcessor = slice.IsAutomation;
+            var isCreation = slice.HasEmptyGivenState;
             var route = isCreation ? prefix : prefix + "/{id}/" + Kebab(name.Replace(noun, ""));
 
             if (!isProcessor && !routes.TryAdd(route, slice.Name))
@@ -194,7 +192,7 @@ public static class SpecRegistry
         var creations = plans.Count(p => p.IsCreation);
         if (creations != 1)
             throw new InvalidOperationException(
-                "the spec must have exactly one creation slice (first given status NotLogged); found " + creations + ".");
+                "the spec must have exactly one creation slice (a given s: with no props); found " + creations + ".");
 
         return plans;
     }
